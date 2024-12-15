@@ -10,6 +10,25 @@ class VGGFaceFeatureExtractor(nn.Module):
         super(VGGFaceFeatureExtractor, self).__init__()
 
         # Use VGG16-like architecture
+        self.vgg16 = models.vgg16(pretrained=False)  
+        self.vgg16.features[0] = nn.Conv2d(input_channel, 64, kernel_size=3, stride=1, padding=1)
+        
+        # Retain convolutional layers and intermediate fully connected layers
+        self.features = self.vgg16.features
+        self.fc_layers = nn.Sequential(*list(self.vgg16.classifier[:-1]))  # Exclude last layer
+
+    def forward(self, x):
+        # Extract features
+        x = self.features(x)
+        x = x.view(x.size(0), -1)  
+        x = self.fc_layers(x)     
+        return x
+    
+class VGGFaceFeatureExtractor_image(nn.Module):
+    def __init__(self, input_channel):
+        super(VGGFaceFeatureExtractor, self).__init__()
+
+        # Use VGG16-like architecture
         self.vgg16 = models.vgg16(pretrained=False)
         
         # Modify the first layer to accept the specified number of input channels

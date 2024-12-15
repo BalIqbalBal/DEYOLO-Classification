@@ -21,11 +21,11 @@ def trainTEDLMFeatureFusion(project_name, lr=1e-4, num_epoch=50):
     print("Using device:", device)
 
     # Dataset
-    batch_size = 2
+    batch_size = 15
     train_loader, test_loader = getDualImageDataloader(batch_size)
 
     # Define model (replace with your actual model)
-    model = TEDLMFeatureFusion().to(device)
+    model = TEDLMFeatureFusion(n_components=15).to(device)
 
     # Print the model architecture
     print("Model Architecture:")
