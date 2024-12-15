@@ -4,6 +4,15 @@ import shutil
 from facenet_pytorch import MTCNN
 from PIL import Image
 import cv2
+import numpy as np
+
+def resize_image(image):
+    width = int(image.shape[1])
+    height = int(image.shape[0])
+    dim = (width, height)
+    # Resize image
+    resized = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+    return resized
 
 def crop_face_HOG(source_dir, target_dir):
     # Inisialisasi detektor wajah HOG dari OpenCV
@@ -150,26 +159,30 @@ def duplicate_random_files(src_dir, target_dir, difference):
         shutil.copy(source_path, target_path)
 
 def sync_directories(base_dir1, base_dir2):
-    """Memeriksa dan menyamakan jumlah file di dua direktori pasangan."""
-    for part in os.listdir(base_dir1):
-        part_dir1 = os.path.join(base_dir1, part)
-        part_dir2 = os.path.join(base_dir2, part)
+    """Sinkronisasi file di folder 'label' antara dataset thermal dan RGB."""
+    
+    for part1 in os.listdir(base_dir1):
+        part_dir1 = os.path.join(base_dir1, part1)
+        part_dir2 = os.path.join(base_dir2, part1.replace("T_Annotated", "RGB_FaceOnly_Annotated"))
 
-        if not os.path.isdir(part_dir1):
+        if not os.path.isdir(part_dir1) or not os.path.isdir(part_dir2):
+            print(f"Skipping: {part_dir1} or {part_dir2} does not exist.")
             continue
 
         for sub in os.listdir(part_dir1):
             sub_dir1 = os.path.join(part_dir1, sub)
             sub_dir2 = os.path.join(part_dir2, sub)
 
-            if not os.path.isdir(sub_dir1):
+            if not os.path.isdir(sub_dir1) or not os.path.isdir(sub_dir2):
+                print(f"Skipping: {sub_dir1} or {sub_dir2} does not exist.")
                 continue
 
             for trial in os.listdir(sub_dir1):
                 trial_dir1 = os.path.join(sub_dir1, trial)
                 trial_dir2 = os.path.join(sub_dir2, trial)
 
-                if not os.path.isdir(trial_dir1):
+                if not os.path.isdir(trial_dir1) or not os.path.isdir(trial_dir2):
+                    print(f"Skipping: {trial_dir1} or {trial_dir2} does not exist.")
                     continue
 
                 for label in os.listdir(trial_dir1):
@@ -177,22 +190,23 @@ def sync_directories(base_dir1, base_dir2):
                     label_dir2 = os.path.join(trial_dir2, label)
 
                     if not os.path.isdir(label_dir1) or not os.path.isdir(label_dir2):
+                        print(f"Skipping: {label_dir1} or {label_dir2} does not exist.")
                         continue
 
                     count1 = get_file_count(label_dir1)
                     count2 = get_file_count(label_dir2)
 
-                    print(f"Checking {label_dir1} ({count1}) and {label_dir2} ({count2})")
+                    print(f"Checking {label_dir1} ({count1} files) and {label_dir2} ({count2} files)")
 
                     if count1 > count2:
                         difference = count1 - count2
-                        print(f"Duplicating {difference} files in {label_dir2} to match {label_dir1}")
+                        print(f"Duplicating {difference} files from {label_dir1} to {label_dir2}")
                         duplicate_random_files(label_dir1, label_dir2, difference)
                     elif count2 > count1:
                         difference = count2 - count1
-                        print(f"Duplicating {difference} files in {label_dir1} to match {label_dir2}")
+                        print(f"Duplicating {difference} files from {label_dir2} to {label_dir1}")
                         duplicate_random_files(label_dir2, label_dir1, difference)
-
+                        
 def sync_pipeline(base_dir_thermal, base_dir_rgb):
     """Pipeline untuk merename file dan menyamakan jumlah file di direktori pasangan berdasarkan sub, trial, dan label."""
     for part_thermal in os.listdir(base_dir_thermal):
@@ -241,7 +255,7 @@ def sync_pipeline(base_dir_thermal, base_dir_rgb):
                             continue
 
                         print(f"Renaming files in {label_dir_thermal} and {label_dir_rgb}")
-                        rename_thermal_files(label_dir_thermal)
+                        #rename_thermal_files(label_dir_thermal)
                         rename_rgb_files(label_dir_rgb)
 
     print("Synchronizing directories...")

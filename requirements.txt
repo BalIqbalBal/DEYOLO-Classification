@@ -1,3 +1,4 @@
 facenet-pytorch
-scikit-learn
 opencv-python
+tensorboard
+scikit-learn

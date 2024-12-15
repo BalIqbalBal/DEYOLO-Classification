@@ -6,13 +6,15 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
+from utils.datasets import getDualImageDataloader
 
-from model.TEDLM import TEDLMStackFusion
+
+from model.TEDLM import TEDLMStackFusion, StackRGBThermalVGGFaceDNN1
 
 
 def trainTEDLMStackFusion(project_name):
     # Initialize TensorBoard
-    writer = SummaryWriter(log_dir=f"runs/{project_name}")
+    writer = SummaryWriter(log_dir=f"runs/TEDLMStackFusion/{project_name}")
 
     # Create checkpoint directory
     checkpoint_dir = f"runs/TEDLMStackFusion/{project_name}"
@@ -23,14 +25,11 @@ def trainTEDLMStackFusion(project_name):
     print("Using device:", device)
 
     # Dataset 
-    batch_size = 32
-    #train_loader, test_loader = get_dataloaders(data_dir, batch_size=batch_size, num_workers=4)
-    train_loader, test_loader = get_lpfw_dataloaders(batch_size)
+    batch_size = 2
+    train_loader, test_loader = getDualImageDataloader(batch_size)
 
     # Define model
-    num_classes = len(train_loader.dataset.dataset.class_to_idx)
-
-    model = TEDLMStackFusion(n_components=128).to(device)
+    model = StackRGBThermalVGGFaceDNN1().to(device)
 
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()  # Use suitable loss for your problem
@@ -85,7 +84,7 @@ def train_one_epoch(epoch, model, optimizer, criterion, train_loader, writer, de
         _, preds = torch.max(logits, 1)
         all_labels.extend(labels.cpu().numpy())
         all_preds.extend(preds.cpu().numpy())
-        all_probs.extend(torch.softmax(logits, dim=1).cpu().numpy())
+        all_probs.extend(torch.softmax(logits, dim=1).detach().numpy())
 
         train_loader_tqdm.set_postfix({"Loss": f"{loss.item():.4f}"})
 
@@ -150,3 +149,5 @@ def evaluate(epoch, model, criterion, test_loader, writer, device):
     writer.add_scalar("Test/AUC", auc, epoch)
 
     return acc
+
+trainTEDLMStackFusion('test')

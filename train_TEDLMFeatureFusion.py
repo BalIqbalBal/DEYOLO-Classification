@@ -1,16 +1,16 @@
 import os
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error, mean_absolute_error, roc_auc_score
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
+from utils.datasets import getDualImageDataloader
 
 from model.TEDLM import TEDLMFeatureFusion
 
-def trainTEDLMFeatureFusionn(project_name, lr=1e-4, num_epoch=50):
+def trainTEDLMFeatureFusion(project_name, lr=1e-4, num_epoch=50):
     # Initialize TensorBoard
-    writer = SummaryWriter(f"runs/{project_name}")
+    writer = SummaryWriter(f"runs/TEDLMFeatureFusion/{project_name}")
 
     # Create checkpoint directory
     checkpoint_dir = f"runs/TEDLMFeatureFusion/{project_name}"
@@ -21,11 +21,15 @@ def trainTEDLMFeatureFusionn(project_name, lr=1e-4, num_epoch=50):
     print("Using device:", device)
 
     # Dataset
-    batch_size = 32
-    train_loader, test_loader = get_lpfw_dataloaders(batch_size)
+    batch_size = 2
+    train_loader, test_loader = getDualImageDataloader(batch_size)
 
     # Define model (replace with your actual model)
-    model = TEDLMFeatureFusion(n_components=128).to(device)
+    model = TEDLMFeatureFusion().to(device)
+
+    # Print the model architecture
+    print("Model Architecture:")
+    print(model)
 
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
@@ -38,7 +42,7 @@ def trainTEDLMFeatureFusionn(project_name, lr=1e-4, num_epoch=50):
 
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
-        train_accuracy = train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device=device)
+        train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device=device)
         test_accuracy = evaluate(model, test_loader, criterion, epoch, writer, device=device)
 
         # Save checkpoint if test accuracy improves
@@ -65,13 +69,16 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
     all_outputs = []
 
     train_loader_tqdm = tqdm(train_loader, desc=f"Epoch {epoch + 1} Training", leave=False)
-    for images, labels in train_loader_tqdm:
-        images, labels = images.to(device), labels.to(device)
+    for step, (rgb_images, thermal_images, labels) in enumerate(train_loader_tqdm):
+
+        model.to(device)
+        rgb_images, thermal_images, labels = rgb_images.to(device), thermal_images.to(device), labels.to(device)
 
         optimizer.zero_grad()
-        logits = model(images, images)  # Forward pass
+        logits = model(rgb_images, thermal_images)  # Forward pass
         loss = criterion(logits, labels)
         loss.backward()
+        print('p')
         optimizer.step()
 
         total_loss += loss.item()
@@ -79,9 +86,11 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
         _, preds = torch.max(logits, 1)
         all_labels.extend(labels.cpu().numpy())
         all_preds.extend(preds.cpu().numpy())
-        all_outputs.extend(logits.cpu().numpy())
+        all_outputs.extend(torch.softmax(logits, dim=1).cpu().numpy())
 
+        # Set progress bar postfix and print current step info
         train_loader_tqdm.set_postfix({"Loss": f"{loss.item():.4f}"})
+        print(f"Epoch {epoch + 1}, Step {step + 1}, Loss: {loss.item():.4f}")
 
     # Metrics
     acc = accuracy_score(all_labels, all_preds)
@@ -113,17 +122,17 @@ def evaluate(model, test_loader, criterion, epoch, writer, device):
     all_outputs = []
 
     with torch.no_grad():
-        for images, labels in tqdm(test_loader, desc="Evaluating", leave=False):
-            images, labels = images.to(device), labels.to(device)
+        for rgb_images, thermal_images, labels in tqdm(test_loader, desc="Evaluating", leave=False):
+            rgb_images, thermal_images, labels = rgb_images.to(device), thermal_images.to(device), labels.to(device)
 
-            logits = model(images, images)
+            logits = model(rgb_images, thermal_images)
             loss = criterion(logits, labels)
             total_loss += loss.item()
 
             _, preds = torch.max(logits, 1)
             all_labels.extend(labels.cpu().numpy())
             all_preds.extend(preds.cpu().numpy())
-            all_outputs.extend(logits.cpu().numpy())
+            all_outputs.extend(torch.softmax(logits, dim=1).cpu().numpy())
 
     # Metrics
     acc = accuracy_score(all_labels, all_preds)
@@ -145,3 +154,5 @@ def evaluate(model, test_loader, criterion, epoch, writer, device):
     writer.add_scalar("Test/AUC", auc, epoch)
 
     return acc
+
+trainTEDLMFeatureFusion('test')
