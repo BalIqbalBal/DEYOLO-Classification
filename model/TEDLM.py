@@ -62,8 +62,8 @@ class LinearPCA:
 class DNN1(nn.Module):
     def __init__(self):
         super(DNN1, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=(1, 5))
-        self.conv2 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=(1, 5))
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=(5, 1))
+        self.conv2 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=(5, 1))
         self.bilstm = nn.LSTM(input_size=256, hidden_size=256, bidirectional=True, batch_first=True)
         self.dropout = nn.Dropout(0.5)
 
@@ -83,8 +83,8 @@ class DNN1(nn.Module):
 class DNN2(nn.Module):
     def __init__(self):
         super(DNN2, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=128, kernel_size=(1, 5))
-        self.conv2 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(1, 5))
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=128, kernel_size=(5, 1))
+        self.conv2 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(5, 1))
         self.bilstm = nn.LSTM(input_size=128, hidden_size=32, bidirectional=True, batch_first=True)
         self.dropout = nn.Dropout(0.5)
 
@@ -105,6 +105,7 @@ class DNN3(nn.Module):
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
+        x = x.squeeze(2)
         x = F.relu(self.conv1(x.squeeze(1)))  # Conv1d expects (batch_size, channels, seq_len)
         x = x.transpose(1, 2)  # Swap dimensions to (batch_size, seq_len, features)
         x, _ = self.bilstm(x)
@@ -162,15 +163,14 @@ class TEDLMFeatureFusion(nn.Module):
         # Concatenate RGB and thermal features
         combined_features = torch.cat((rgb_features, thermal_features), dim=1)
 
-        # If PCA has been fitted, transform using the fitted PCA model
-        if self.pca_fitted:
-            combined_features_np = combined_features.detach().cpu().numpy()
-            reduced_features = torch.tensor(self.pca.transform(combined_features_np)).to(combined_features.device)
-        else:
-            reduced_features = combined_features  # Use raw features if PCA hasn't been applied
+         # Apply PCA to reduce to 256 dimensions
+        combined_features_np = combined_features.detach().cpu().numpy()  # Convert to NumPy
+        reduced_features_np = self.pca.fit_transform(combined_features_np)  # Fit and reduce
+        reduced_features = torch.tensor(reduced_features_np).to(combined_features.device)  # Convert back to tensor
 
         # Reshape for DNN input (assumes 1 channel input for each DNN)
-        dnn_input = reduced_features.unsqueeze(1).unsqueeze(2)
+        num_channels = reduced_features.shape[1]  # Number of features in the reduced features
+        dnn_input = reduced_features.view(-1, num_channels, 1, 1)  # Shape (batch_size, num_channels, 1, 1)
 
         # Late fusion DNN
         output = self.late_fusion(dnn_input)
