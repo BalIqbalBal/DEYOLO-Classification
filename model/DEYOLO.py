@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from common import Conv, Bottleneck, C2f
+from .common import Conv, Bottleneck, C2f
 
 class DEYOLOCLASS(nn.Module):
     def __init__(self):
@@ -33,48 +33,60 @@ class DEYOLOCLASS(nn.Module):
 
 class Head(nn.Module):
     def __init__(self):
-        """
-        Initializes the Head module, integrating DEA layers for attention 
-        and a classification head for final output.
-        """
-        super().__init__()
+        super(Head, self).__init__()
+
         # Define DEA modules for attention
         self.dea_1 = DEA(256, 80)   # For layers [4, 14]
         self.dea_2 = DEA(512, 40)   # For layers [6, 16]
         self.dea_3 = DEA(1024, 20)  # For layers [9, 19]
 
+        # Convolutional layers for upsampling
+        self.upsample_1 = nn.Sequential(
+            nn.Conv2d(256, 1024, kernel_size=1, stride=1, padding=0),
+            nn.Upsample(size=(7, 7), mode='bilinear', align_corners=False)
+        )
+        self.upsample_2 = nn.Sequential(
+            nn.Conv2d(512, 1024, kernel_size=1, stride=1, padding=0),
+            nn.Upsample(size=(7, 7), mode='bilinear', align_corners=False)
+        )
+        self.upsample_3 = nn.Conv2d(1024, 1024, kernel_size=1, stride=1, padding=0)  # Already (7, 7), only adjust channels
+
         # Classification head
-        c1, c2 = 1280, 10  # Example parameters for classification
+        c1, c2 = 1024 * 3, 5 # Updated input channels for concatenated features
         self.conv = Conv(c1, 1280, 1, 1)  # EfficientNet-b0 size
         self.pool = nn.AdaptiveAvgPool2d(1)  # Pool to shape (b, c_, 1, 1)
         self.drop = nn.Dropout(p=0.2, inplace=True)  # Optional dropout
         self.linear = nn.Linear(1280, c2)  # Final fully connected layer
-        self.export = False  # Export mode flag
 
     def forward(self, backbone_outputs):
         """
         Forward pass of the Head module.
 
         Args:
-            backbone_outputs (list): Outputs from Backbone layers.
+            backbone_outputs (list): Combined outputs from RGB and thermal backbones.
 
         Returns:
             tuple: Classifier output and intermediate attention outputs.
         """
         # Apply DEA modules
-        attention_1 = self.dea_1((backbone_outputs[4], backbone_outputs[14]))  # [4, 14]
-        attention_2 = self.dea_2((backbone_outputs[6], backbone_outputs[16]))  # [6, 16]
-        attention_3 = self.dea_3((backbone_outputs[9], backbone_outputs[19]))  # [9, 19]
+        attention_1 = self.dea_1((backbone_outputs[0][0], backbone_outputs[0][1]))  # Layer pair [4, 14]
+        attention_2 = self.dea_2((backbone_outputs[1][0], backbone_outputs[1][1]))  # Layer pair [6, 16]
+        attention_3 = self.dea_3((backbone_outputs[2][0], backbone_outputs[2][1]))  # Layer pair [9, 19]
 
-        # Concatenate attention outputs
-        classifier_input = torch.cat([attention_1, attention_2, attention_3], dim=1)
+        # Upsample attention outputs to the same size and channels
+        upsampled_1 = self.upsample_1(attention_1)  # Shape: 1024x7x7
+        upsampled_2 = self.upsample_2(attention_2)  # Shape: 1024x7x7
+        upsampled_3 = self.upsample_3(attention_3)  # Shape: 1024x7x7
+
+        # Concatenate upsampled features
+        classifier_input = torch.cat([upsampled_1, upsampled_2, upsampled_3], dim=1)  # Shape: (batch, 1024*3, 7, 7)
 
         # Pass through the classification head
         x = self.linear(self.drop(self.pool(self.conv(classifier_input)).flatten(1)))
-        if self.training:
-            return x, (attention_1, attention_2, attention_3)
-        y = x.softmax(1)  # Final output
-        return (y, x) if not self.export else y
+        #if self.training:
+        return x #, (attention_1, attention_2, attention_3)
+        #y = x.softmax(1)  # Final output
+        #return y DONT USE SOFTMAX BECAUSE WE USE NN.CROSSENTROPY
 
 class DEYOLOBackbone(nn.Module):
     def __init__(self):
@@ -82,27 +94,27 @@ class DEYOLOBackbone(nn.Module):
         self.layers = nn.ModuleList([
             Conv(3, 64, 3, 2),  # 0-P1/2
             Conv(64, 128, 3, 2),  # 1-P2/4
-            C2f_BiFocus(128, focus=True),
-            C2f_BiFocus(128, focus=True),
-            C2f_BiFocus(128, focus=True),  # 2
+            C2f_BiFocus(128, 128),
+            C2f_BiFocus(128, 128),
+            C2f_BiFocus(128, 128),  # 2
             Conv(128, 256, 3, 2),  # 3-P3/8
-            C2f(256, focus=True),
-            C2f(256, focus=True),
-            C2f(256, focus=True),
-            C2f(256, focus=True),
-            C2f(256, focus=True),
-            C2f(256, focus=True),  # 4
+            C2f(256, 256),
+            C2f(256, 256),
+            C2f(256, 256),
+            C2f(256, 256),
+            C2f(256, 256),
+            C2f(256, 256),  # 4
             Conv(256, 512, 3, 2),  # 5-P4/16
-            C2f(512, focus=True),
-            C2f(512, focus=True),
-            C2f(512, focus=True),
-            C2f(512, focus=True),
-            C2f(512, focus=True),
-            C2f(512, focus=True),  # 6
+            C2f(512, 512),
+            C2f(512, 512),
+            C2f(512, 512),
+            C2f(512, 512),
+            C2f(512, 512),
+            C2f(512, 512),  # 6
             Conv(512, 1024, 3, 2),  # 7-P5/32
-            C2f(1024, focus=True),
-            C2f(1024, focus=True),
-            C2f(1024, focus=True)  # 8
+            C2f(1024, 1024),
+            C2f(1024, 1024),
+            C2f(1024, 1024)  # 8
         ])
 
     def forward(self, x):
@@ -227,7 +239,7 @@ class DEPA(nn.Module):
 
 class C2f_BiFocus(nn.Module):
 
-    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
         super().__init__()
         self.c = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, 2 * self.c, 1, 1)
