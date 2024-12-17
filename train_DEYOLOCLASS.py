@@ -6,14 +6,14 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from utils.datasets import getDualImageDataloader
 
-from model.TEDLM import TEDLMFeatureFusion
+from model.DEYOLO import DEYOLOCLASS
 
-def trainTEDLMFeatureFusion(project_name, lr=1e-4, num_epoch=50):
+def trainDEYOLOCLASS(project_name, lr=1e-4, num_epoch=50):
     # Initialize TensorBoard
-    writer = SummaryWriter(f"runs/TEDLMFeatureFusion/{project_name}")
+    writer = SummaryWriter(f"runs/trainDEYOLOCLASS/{project_name}")
 
     # Create checkpoint directory
-    checkpoint_dir = f"runs/TEDLMFeatureFusion/{project_name}"
+    checkpoint_dir = f"runs/trainDEYOLOCLASS/{project_name}"
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     # Device configuration
@@ -25,7 +25,7 @@ def trainTEDLMFeatureFusion(project_name, lr=1e-4, num_epoch=50):
     train_loader, test_loader = getDualImageDataloader(batch_size)
 
     # Define model (replace with your actual model)
-    model = TEDLMFeatureFusion(n_components=15).to(device)
+    model = DEYOLOCLASS().to(device)
 
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
@@ -150,4 +150,4 @@ def evaluate(model, test_loader, criterion, epoch, writer, device):
 
     return acc
 
-trainTEDLMFeatureFusion('test')
+trainDEYOLOCLASS('test')

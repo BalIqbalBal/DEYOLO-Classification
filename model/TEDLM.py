@@ -62,16 +62,12 @@ class LinearPCA:
 class DNN1(nn.Module):
     def __init__(self):
         super(DNN1, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=(5, 1))
-        self.conv2 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=(5, 1))
+        self.conv1 = nn.Conv2d(in_channels=512, out_channels=256, kernel_size=(1, 1))
+        self.conv2 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=(1, 1))
         self.bilstm = nn.LSTM(input_size=256, hidden_size=256, bidirectional=True, batch_first=True)
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
-
-        # Apply adaptive pooling to reduce channels to 1 before passing to conv1
-        x = x.mean(dim=1, keepdim=True)  # Reduce channels to 1
-
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = x.view(x.size(0), x.size(2), -1)  # Flatten to (batch_size, seq_len, features)
@@ -83,8 +79,8 @@ class DNN1(nn.Module):
 class DNN2(nn.Module):
     def __init__(self):
         super(DNN2, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=128, kernel_size=(5, 1))
-        self.conv2 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(5, 1))
+        self.conv1 = nn.Conv2d(in_channels=512, out_channels=128, kernel_size=(1, 1))
+        self.conv2 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(1, 1))
         self.bilstm = nn.LSTM(input_size=128, hidden_size=32, bidirectional=True, batch_first=True)
         self.dropout = nn.Dropout(0.5)
 
@@ -100,7 +96,7 @@ class DNN2(nn.Module):
 class DNN3(nn.Module):
     def __init__(self):
         super(DNN3, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels=1, out_channels=256, kernel_size=5)
+        self.conv1 = nn.Conv1d(in_channels=512, out_channels=256, kernel_size=1)
         self.bilstm = nn.LSTM(input_size=256, hidden_size=128, bidirectional=True, batch_first=True)
         self.dropout = nn.Dropout(0.5)
 
@@ -120,8 +116,7 @@ class LateFusionModel(nn.Module):
         self.dnn2 = DNN2()
         self.dnn3 = DNN3()
 
-        # Initialize fc as a placeholder, to be updated later
-        self.fc = None
+        self.fc = nn.Linear(832, 5)
 
     def forward(self, x):
         # Forward pass through each DNN to get their outputs
@@ -132,28 +127,43 @@ class LateFusionModel(nn.Module):
         # Concatenate the outputs from all DNNs
         fused = torch.cat((out1, out2, out3), dim=1)
 
-        # Print the shape of the fused tensor for debugging
-        #print(f"Shape of fused tensor: {fused.shape}")
-
-        # Initialize the fully connected layer only once
-        if self.fc is None:
-            # Set the input size as the second dimension of fused (number of features)
-            input_size = fused.size(1)  # Number of features after concatenation
-            self.fc = nn.Linear(input_size, 5)  # Map to 5 output classes
-
         # Pass the fused tensor through the fully connected layer
         output = self.fc(fused)
         return output
+
+class FeatureReducer(nn.Module):
+    def __init__(self, input_features, reduced_features):
+        super(FeatureReducer, self).__init__()
+        # Reduction path
+        self.reducer = nn.Sequential(
+            nn.Linear(input_features, 128),    # Hidden layer 1
+            nn.BatchNorm1d(128),               # Batch normalization
+            nn.ReLU(),
+            nn.Linear(128, 64),                # Hidden layer 2
+            nn.BatchNorm1d(64),                # Batch normalization
+            nn.ReLU(),
+            nn.Linear(64, reduced_features),   # Output layer
+            nn.BatchNorm1d(reduced_features)   # Batch normalization
+        )
+        
+        # Bottleneck linear layer for skip connection
+        self.bottleneck = nn.Linear(input_features, reduced_features)
+
+    def forward(self, x):
+        # Skip connection
+        reduced_features = self.reducer(x)
+        bottleneck_features = self.bottleneck(x)
+        
+        # Combine outputs (skip connection with reduced features)
+        return reduced_features + bottleneck_features
 
 class TEDLMFeatureFusion(nn.Module):
     def __init__(self, n_components=15):
         super(TEDLMFeatureFusion, self).__init__()
         self.vggface = VGGFaceFeatureExtractor(3)
-        self.pca = LinearPCA(n_components=n_components)
+        self.CR = FeatureReducer(8192, 512)
         self.late_fusion = LateFusionModel()
-        
-        # Optionally, store fitted PCA during training or pre-processing
-        self.pca_fitted = False
+
 
     def forward(self, rgb, thermal):
         # Feature extraction for RGB and thermal
@@ -163,17 +173,12 @@ class TEDLMFeatureFusion(nn.Module):
         # Concatenate RGB and thermal features
         combined_features = torch.cat((rgb_features, thermal_features), dim=1)
 
-         # Apply PCA to reduce to 256 dimensions
-        combined_features_np = combined_features.detach().cpu().numpy()  # Convert to NumPy
-        reduced_features_np = self.pca.fit_transform(combined_features_np)  # Fit and reduce
-        reduced_features = torch.tensor(reduced_features_np).to(combined_features.device)  # Convert back to tensor
-
-        # Reshape for DNN input (assumes 1 channel input for each DNN)
-        num_channels = reduced_features.shape[1]  # Number of features in the reduced features
-        dnn_input = reduced_features.view(-1, num_channels, 1, 1)  # Shape (batch_size, num_channels, 1, 1)
+        # Channel Reduction
+        reduced_features = self.CR(combined_features)  # Fit and reduce
+        reduced_features = reduced_features.unsqueeze(2).unsqueeze(3)
 
         # Late fusion DNN
-        output = self.late_fusion(dnn_input)
+        output = self.late_fusion(reduced_features)
         output = F.softmax(output, dim=1)
         return output
 
@@ -181,64 +186,24 @@ class TEDLMStackFusion(nn.Module):
     def __init__(self, n_components):
         super(TEDLMStackFusion, self).__init__()
         self.vggface = VGGFaceFeatureExtractor(4)
-        self.pca = LinearPCA(n_components=n_components)
+        self.CR = FeatureReducer(4096, 512)
         self.late_fusion = LateFusionModel()
 
     def forward(self, rgb_image, thermal_image):
         # Early fusion: stack RGB and thermal images
         fused_input = torch.cat((rgb_image, thermal_image), dim=1)  # Stack along channel axis
+
         # Extract VGGFace features
         features = self.vggface(fused_input)
-        # PCA dimensionality reduction (requires offline PCA fitting)
-        features_pca = torch.tensor(self.pca.transform(features.detach().numpy()), dtype=torch.float32)
-        # Reshape PCA features for DNNs
-        features_pca = features_pca.unsqueeze(1).unsqueeze(-1)  # Add channel dimensions for DNNs
-        # Late fusion
-        output = self.late_fusion(features_pca)
-        return output
 
-
-class TEDLMStackFusionWithoutPCA(nn.Module):
-    def __init__(self):
-        super(TEDLMStackFusion, self).__init__()
-        self.vggface = VGGFaceFeatureExtractor(4)  # Assuming 4 channels for fused input (RGB + thermal)
-        self.late_fusion = LateFusionModel()
-
-    def forward(self, rgb_image, thermal_image):
-        # Early fusion: stack RGB and thermal images along the channel axis
-        fused_input = torch.cat((rgb_image, thermal_image), dim=1)  # Stack along channel axis
-
-        # Extract features from VGGFace
-        features = self.vggface(fused_input)
-
-        # Reshape features for DNN input
-        features_pca = features.unsqueeze(1).unsqueeze(-1)  # Add channel dimensions for DNNs
+        # Channel Reduction
+        reduced_features = self.CR(combined_features)  # Fit and reduce
+        reduced_features = reduced_features.unsqueeze(2).unsqueeze(3)
 
         # Late fusion
-        output = self.late_fusion(features_pca)
+        output = self.late_fusion(reduced_features)
         return output
 
-class TEDLMFeatureFusionWithoutPCA(nn.Module):
-    def __init__(self):
-        super(TEDLMFeatureFusion, self).__init__()
-        self.vggface = VGGFaceFeatureExtractor(3)  # Assuming 3 channels (RGB)
-        self.late_fusion = LateFusionModel()  # Assuming the late fusion model handles final output
-    
-    def forward(self, rgb, thermal):
-        # Feature extraction for RGB and thermal
-        rgb_features = self.vggface(rgb)
-        thermal_features = self.vggface(thermal)
-
-        # Concatenate RGB and thermal features along the channel dimension
-        combined_features = torch.cat((rgb_features, thermal_features), dim=1)
-
-        # Reshape for DNN input (assumes 1 channel input for each DNN)
-        dnn_input = combined_features.unsqueeze(1).unsqueeze(2)
-
-        # Late fusion DNN
-        output = self.late_fusion(dnn_input)
-        output = F.softmax(output, dim=1)
-        return output
 
 class StackRGBThermalVGGFaceDNN1(nn.Module):
     def __init__(self):
@@ -252,8 +217,6 @@ class StackRGBThermalVGGFaceDNN1(nn.Module):
         fused_input = torch.cat((rgb_image, thermal_image), dim=1)  # Stack RGB and thermal along channel axis
 
         # Check if the shape is [batch_size, channels, height, width] before passing to VGGFace
-        print(f"Shape of fused input: {fused_input.shape}")
-
         # Extract features using VGGFace
         features = self.vggface(fused_input)
 
