@@ -7,8 +7,6 @@ from torch.utils.tensorboard import SummaryWriter
 from utils.datasets import getSingleImageDataloader  #
 from torchvision import models
 
-from model.DEYOLO import DEYOLOCLASS  
-
 def get_vggface_model(num_classes, pretrained=True, freeze=True):
     # Load pre-trained VGG16 model
     model = models.vgg16(pretrained=pretrained)
