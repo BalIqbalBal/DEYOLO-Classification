@@ -3,9 +3,25 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error, mean_absolute_error, roc_auc_score
 from tqdm import tqdm
+import argparse
 from torch.utils.tensorboard import SummaryWriter
 from utils.datasets import getSingleImageDataloader  #
 from torchvision import models
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    
+    # Training hyperparameters
+    parser.add_argument('--learning-rate', type=float, default=1e-4)
+    parser.add_argument('--num-epochs', type=int, default=50)
+    parser.add_argument('--batch-size', type=int, default=15)
+    
+    # SageMaker parameters
+    parser.add_argument('--project-name', type=str)
+    parser.add_argument('--checkpoint', type=str)
+    parser.add_argument('--model-dir', type=str, default=os.environ.get('SM_MODEL_DIR', '/opt/ml/model'))
+    parser.add_argument('--output-data-dir', type=str, default=os.environ.get('SM_OUTPUT_DATA_DIR', '/opt/ml/output'))
+    parser.add_argument('--data-dir', type=str, default=os.environ.get('SM_CHANNEL_TRAINING', '/opt/ml/input/data/training'))
 
 def get_vggface_model(num_classes, pretrained=True, freeze=True):
     # Load pre-trained VGG16 model
@@ -20,37 +36,46 @@ def get_vggface_model(num_classes, pretrained=True, freeze=True):
     
     return model
 
-def trainVGGFace(project_name, lr=1e-4, num_epoch=50):
-    # Initialize TensorBoard
-    writer = SummaryWriter(f"runs/VGGFace/{project_name}")
+def trainVGGFace(args, type_model):
+    # Initialize TensorBoard with SageMaker output path
+    writer = SummaryWriter(os.path.join(args.checkpoint, args.project_name))
 
-    # Create checkpoint directory
-    checkpoint_dir = f"runs/VGGFace/{project_name}"
+    # Create checkpoint directory in SageMaker model directory
+    checkpoint_dir = os.path.join(args.checkpoint, args.project_name)
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     # Device configuration
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Using device:", device)
 
-    # Dataset
-    num_classes = 5
-    batch_size = 15
-    train_loader, test_loader = getSingleImageDataloader(batch_size, image_type="rgb")
+    # Set dataset directory based on model type
+    if type_model == 'rgb':
+        data_dir = os.path.join(args.data_dir, 'rgb')
+    elif type_model == 'thermal':
+        data_dir = os.path.join(args.data_dir, 'thermal')
+    else:
+        raise ValueError("Invalid type_model. Must be 'rgb' or 'thermal'.")
+    
+    train_loader, test_loader = getSingleImageDataloader(
+        args.batch_size,
+        image_dir=data_dir,
+        image_type="rgb"
+    )
 
     # Define model
+    num_classes = 5
     model = get_vggface_model(num_classes).to(device)
 
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
     # Training loop
-    num_epochs = num_epoch
     save_interval = 5  # Save model every 5 epochs
     best_accuracy = 0.0
 
-    for epoch in range(num_epochs):
-        print(f"Epoch {epoch + 1}/{num_epochs}")
+    for epoch in range(args.num_epochs):
+        print(f"Epoch {epoch + 1}/{args.num_epochs}")
         train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device=device)
         test_accuracy = evaluate(model, test_loader, criterion, epoch, writer, device=device)
 
@@ -67,6 +92,10 @@ def trainVGGFace(project_name, lr=1e-4, num_epoch=50):
             print(f"Checkpoint saved at {checkpoint_path}.")
 
     # Close TensorBoard writer
+    # Save final model
+    final_model_path = os.path.join(checkpoint_dir, "model-final.pth")
+    torch.save(model.state_dict(), final_model_path)
+
     writer.close()
 
 # Training function
@@ -160,4 +189,6 @@ def evaluate(model, test_loader, criterion, epoch, writer, device):
 
     return acc
 
-trainVGGFace('RGB')
+if __name__ == "__main__":
+    args = parse_args()
+    trainVGGFace(args)

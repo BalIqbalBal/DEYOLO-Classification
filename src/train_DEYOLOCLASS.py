@@ -5,55 +5,84 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from utils.datasets import getDualImageDataloader
-
+import argparse
 from model.DEYOLO import DEYOLOCLASS
 
-def trainDEYOLOCLASS(project_name, lr=1e-4, num_epoch=50):
-    # Initialize TensorBoard
-    writer = SummaryWriter(f"runs/trainDEYOLOCLASS/{project_name}")
+def parse_args():
+    parser = argparse.ArgumentParser()
+    
+    # Training hyperparameters
+    parser.add_argument('--learning-rate', type=float, default=1e-4)
+    parser.add_argument('--num-epochs', type=int, default=50)
+    parser.add_argument('--batch-size', type=int, default=15)
+    
+    # SageMaker parameters
+    parser.add_argument('--project-name', type=str)
+    parser.add_argument('--checkpoint', type=str)
+    parser.add_argument('--model-dir', type=str, default=os.environ.get('SM_MODEL_DIR', '/opt/ml/model'))
+    parser.add_argument('--output-data-dir', type=str, default=os.environ.get('SM_OUTPUT_DATA_DIR', '/opt/ml/output'))
+    parser.add_argument('--data-dir', type=str, default=os.environ.get('SM_CHANNEL_TRAINING', '/opt/ml/input/data/training'))
+    
+    return parser.parse_args()
+def trainDEYOLOCLASS(args):
+    # Initialize TensorBoard with SageMaker output path
+    writer = SummaryWriter(os.path.join(args.checkpoint, args.project_name))
 
-    # Create checkpoint directory
-    checkpoint_dir = f"runs/trainDEYOLOCLASS/{project_name}"
+    # Create checkpoint directory in SageMaker model directory
+    checkpoint_dir = os.path.join(args.checkpoint, args.project_name)
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     # Device configuration
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Using device:", device)
 
-    # Dataset
-    batch_size = 15
-    train_loader, test_loader = getDualImageDataloader(batch_size)
+    # Setup data directories
+    rgb_dir = os.path.join(args.data_dir, 'rgb')
+    thermal_dir = os.path.join(args.data_dir, 'thermal')
+    print(f"Loading data from:\nRGB: {rgb_dir}\nThermal: {thermal_dir}")
 
-    # Define model (replace with your actual model)
+    # Dataset
+    train_loader, test_loader = getDualImageDataloader(
+        args.batch_size,
+        rgb_dir=rgb_dir,
+        thermal_dir=thermal_dir
+    )
+
+    # Define model
     model = DEYOLOCLASS().to(device)
 
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
     # Training loop
-    num_epochs = num_epoch
-    save_interval = 5  # Save model every 5 epochs
+    save_interval = 5
     best_accuracy = 0.0
 
-    for epoch in range(num_epochs):
-        print(f"Epoch {epoch + 1}/{num_epochs}")
+    for epoch in range(args.num_epochs):
+        print(f"Epoch {epoch + 1}/{args.num_epochs}")
         train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device=device)
         test_accuracy = evaluate(model, test_loader, criterion, epoch, writer, device=device)
 
         # Save checkpoint if test accuracy improves
         if test_accuracy > best_accuracy:
             best_accuracy = test_accuracy
-            torch.save(model.state_dict(), os.path.join(checkpoint_dir, "best_model.pth"))
-            print(f"New best accuracy: {best_accuracy:.4f}. Best model saved.")
+            model_path = os.path.join(args.model_dir, "model.pth")
+            torch.save(model.state_dict(), model_path)
+            print(f"New best accuracy: {best_accuracy:.4f}. Best model saved to {model_path}")
         
         # Save checkpoint every `save_interval` epochs
         if (epoch + 1) % save_interval == 0:
             checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch + 1}.pth")
             torch.save(model.state_dict(), checkpoint_path)
-            print(f"Checkpoint saved at {checkpoint_path}.")
+            print(f"Checkpoint saved at {checkpoint_path}")
 
-    # Close TensorBoard writer
+    # Save final model
+    final_model_path = os.path.join(checkpoint_dir, "model-final.pth")
+    torch.save(model.state_dict(), final_model_path)
+
+    print(f"Final model saved at {final_model_path}")
+
     writer.close()
 
 # Training function
@@ -150,4 +179,6 @@ def evaluate(model, test_loader, criterion, epoch, writer, device):
 
     return acc
 
-trainDEYOLOCLASS('test')
+if __name__ == "__main__":
+    args = parse_args()
+    trainDEYOLOCLASS(args)

@@ -1,4 +1,4 @@
-facenet-pytorch
 opencv-python
-tensorboard
 scikit-learn
+pillow
+requests

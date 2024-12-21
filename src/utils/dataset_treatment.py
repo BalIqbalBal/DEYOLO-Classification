@@ -1,7 +1,7 @@
 import os
 import random
 import shutil
-from facenet_pytorch import MTCNN
+#from facenet_pytorch import MTCNN
 from PIL import Image
 import cv2
 import numpy as np
@@ -57,7 +57,7 @@ def crop_face_HOG(source_dir, target_dir):
             except Exception as e:
                 print(f"Error processing {source_path}: {e}")
 
-
+"""
 def crop_face_mtcnn(source_dir, target_dir):
     # Inisialisasi MTCNN
     mtcnn = MTCNN(keep_all=True)
@@ -107,6 +107,7 @@ def crop_face_mtcnn(source_dir, target_dir):
             
             except Exception as e:
                 print(f"Error processing {source_path}: {e}")
+"""
 
 def get_file_count(directory):
     """Mendapatkan jumlah file dalam direktori."""

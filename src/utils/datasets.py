@@ -1,4 +1,7 @@
 import os
+import requests
+import zipfile
+from io import BytesIO
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms
@@ -7,6 +10,40 @@ import os
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms
+
+# URL for dataset download (replace this with your actual dataset URL)
+DATASET_URL = "https://pain-identification-datasets.s3.ap-southeast-1.amazonaws.com/formatted_dataset.rar"
+DATASET_DIR = "dataset/formatted_dataset"
+
+def download_and_extract(url, dest_dir):
+    """
+    Downloads and extracts the dataset if it doesn't exist.
+
+    Args:
+        url (str): URL to download the dataset from.
+        dest_dir (str): Directory to save the extracted dataset.
+    """
+    print(f"Dataset not found. Downloading from {url}...")
+    
+    # Create destination directory if it does not exist
+    os.makedirs(dest_dir, exist_ok=True)
+
+    # Download the dataset
+    response = requests.get(url)
+    response.raise_for_status()  # Ensure we got a valid response
+    
+    # Extract zip file
+    with zipfile.ZipFile(BytesIO(response.content)) as zip_ref:
+        zip_ref.extractall(dest_dir)
+
+    print(f"Dataset downloaded and extracted to {dest_dir}")
+
+def check_and_download_dataset():
+    """
+    Checks if the dataset exists. If not, it downloads and extracts it.
+    """
+    if not os.path.exists(DATASET_DIR):
+        download_and_extract(DATASET_URL, DATASET_DIR)
 
 def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset/rgb", test_split=0.2, image_type="rgb"):
     """
@@ -22,6 +59,8 @@ def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset
         train_loader (DataLoader): DataLoader for training data.
         test_loader (DataLoader): DataLoader for testing data.
     """
+    #Checks if the dataset exists. If not, it downloads and extracts it
+    check_and_download_dataset()
 
     # Define transformations (if any)
     transform = transforms.Compose([
@@ -114,6 +153,8 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
         train_loader (DataLoader): DataLoader for training data.
         test_loader (DataLoader): DataLoader for testing data.
     """
+    #Checks if the dataset exists. If not, it downloads and extracts it
+    check_and_download_dataset()
     
     # Define transformations (if any)
     transform = transforms.Compose([
