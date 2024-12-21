@@ -1,10 +1,10 @@
 from sagemaker.estimator import Estimator
 
-role = "arn:aws:iam::123456789012:role/service-role/AmazonSageMaker-ExecutionRole"
+role = "arn:aws:iam::108830828338:role/SageMakerFullAccess"
 
 container_image_uri = '108830828338.dkr.ecr.ap-southeast-1.amazonaws.com/pain-identification:latest'
 
-s3_dataset_path = 's3://pain-identification-datasets/formatted_datasets//'
+s3_dataset_path = 's3://pain-identification-datasets/formatted_datasets/'
 output_path = 's3://pain-identification-result/'
 
 # Define the SageMaker Estimator

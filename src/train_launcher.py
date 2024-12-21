@@ -39,15 +39,15 @@ def main():
     print(f"Project name: {args.project_name}")
     
     if args.model == 'deyolo':
-        from .train_DEYOLOCLASS import trainDEYOLOCLASS
+        from train_DEYOLOCLASS import trainDEYOLOCLASS
         trainDEYOLOCLASS(args)
         
     elif args.model == 'vggfacergb':
-        from .train_vggface import trainVGGFace      
+        from train_vggface import trainVGGFace      
         trainVGGFace(args, type_model='rgb')
     
     elif args.model == 'vggfacethermal':
-        from .train_vggface import trainVGGFace      
+        from train_vggface import trainVGGFace      
         trainVGGFace(args, type_model='thermal')
     
     print(f"Training completed for {args.model}")
