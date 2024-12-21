@@ -1,5 +1,5 @@
 # Base image
-FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+FROM 763104351884.dkr.ecr.ap-southeast-1.amazonaws.com/pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker
 
 # Set the working directory to /opt/ml/code (standard for SageMaker)
 WORKDIR /opt/ml/code
