@@ -60,7 +60,7 @@ def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset
         test_loader (DataLoader): DataLoader for testing data.
     """
     #Checks if the dataset exists. If not, it downloads and extracts it
-    check_and_download_dataset()
+    #check_and_download_dataset()
 
     # Define transformations (if any)
     transform = transforms.Compose([
@@ -154,7 +154,7 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
         test_loader (DataLoader): DataLoader for testing data.
     """
     #Checks if the dataset exists. If not, it downloads and extracts it
-    check_and_download_dataset()
+    #check_and_download_dataset()
     
     # Define transformations (if any)
     transform = transforms.Compose([
