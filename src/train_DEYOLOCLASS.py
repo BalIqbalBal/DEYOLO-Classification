@@ -67,7 +67,7 @@ def trainDEYOLOCLASS(args):
         # Save checkpoint if test accuracy improves
         if test_accuracy > best_accuracy:
             best_accuracy = test_accuracy
-            model_path = os.path.join(args.model_dir, "model.pth")
+            model_path = os.path.join(checkpoint_dir, "model.pth")
             torch.save(model.state_dict(), model_path)
             print(f"New best accuracy: {best_accuracy:.4f}. Best model saved to {model_path}")
         
@@ -78,7 +78,7 @@ def trainDEYOLOCLASS(args):
             print(f"Checkpoint saved at {checkpoint_path}")
 
     # Save final model
-    final_model_path = os.path.join(checkpoint_dir, "model-final.pth")
+    final_model_path = os.path.join(args.model_dir, "model-final.pth")
     torch.save(model.state_dict(), final_model_path)
 
     print(f"Final model saved at {final_model_path}")

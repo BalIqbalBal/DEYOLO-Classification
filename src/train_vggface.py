@@ -93,7 +93,7 @@ def trainVGGFace(args, type_model):
 
     # Close TensorBoard writer
     # Save final model
-    final_model_path = os.path.join(checkpoint_dir, "model-final.pth")
+    final_model_path = os.path.join(args.model_dir, "model-final.pth")
     torch.save(model.state_dict(), final_model_path)
 
     writer.close()

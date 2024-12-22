@@ -11,7 +11,7 @@ output_path = 's3://pain-identification-result/'
 estimator = Estimator(
     image_uri=container_image_uri,
     role=role,
-    instance_type='ml.p2.xlarge',  # Change as needed (make sure its support pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime)
+    instance_type='ml.p3.2xlarge', 
     instance_count=1,
     output_path=output_path,  # This is the S3 location for saving model artifacts
     hyperparameters={
@@ -19,9 +19,10 @@ estimator = Estimator(
         'project-name': 'my_project',  # Optional, train_launcher will generate if not provided
         'learning-rate': 0.001,  # Matches '--learning-rate'
         'num-epochs': 100,  # Matches '--num-epochs'
-        'batch-size': 32,  # Matches '--batch-size'
+        'batch-size': 16,  # Matches '--batch-size'
         'data-dir': '/opt/ml/input/data/training',  # Default SageMaker location for training data
-        'checkpoint': '/opt/ml/model',  # Save checkpoints to model directory (default checkpoint for estimato)
+        'checkpoint': 'output_path',  # Save checkpoints to model directory (default checkpoint for estimato),
+        'model-fir': '/opt/ml/model '
     }
 )
 
