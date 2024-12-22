@@ -16,13 +16,13 @@ estimator = Estimator(
     output_path=output_path,  # This is the S3 location for saving model artifacts
     hyperparameters={
         'model': 'deyolo',  # Required argument for train_launcher.py
-        'project-name': 'my_project',  # Optional, train_launcher will generate if not provided
-        'learning-rate': 0.001,  # Matches '--learning-rate'
+        'project-name': 'deyolotiny',  # Optional, train_launcher will generate if not provided
+        'learning-rate': 0.000001,  # Matches '--learning-rate'
         'num-epochs': 100,  # Matches '--num-epochs'
         'batch-size': 16,  # Matches '--batch-size'
         'data-dir': '/opt/ml/input/data/training',  # Default SageMaker location for training data
-        'checkpoint': 'output_path',  # Save checkpoints to model directory (default checkpoint for estimato),
-        'model-fir': '/opt/ml/model '
+        'checkpoint': output_path,  # Save checkpoints to model directory (default checkpoint for estimato),
+        'model-dir': '/opt/ml/model'
     }
 )
 
