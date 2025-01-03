@@ -6,21 +6,26 @@ from datetime import datetime
 def parse_args():
     parser = argparse.ArgumentParser(description='Training launcher for different models')
     
-    parser.add_argument('--model', type=str, required=True, choices=['deyolo', 'vggfacergb', 'vggfacethermal'],
-                      help='Model type to train (deyolo or vggface)')
+    parser.add_argument('--model', type=str, required=True, 
+                        choices=['deyolo', 'vggfacergb', 'vggfacethermal', 
+                                 'resnetrgb', 'resnetthermal', 
+                                 'shufflenetrgb', 'shufflenetthermal', 
+                                 'mobilenetrgb', 'mobilenetthermal'],
+                        help='Model type to train')
     parser.add_argument('--project-name', type=str, default=None,
-                      help='Project name for logging')
+                        help='Project name for logging')
     parser.add_argument('--learning-rate', type=float, default=1e-4,
-                      help='Learning rate')
+                        help='Learning rate')
     parser.add_argument('--num-epochs', type=int, default=50,
-                      help='Number of epochs')
+                        help='Number of epochs')
     parser.add_argument('--batch-size', type=int, default=15,
-                      help='Batch size')
+                        help='Batch size')
     parser.add_argument('--data-dir', type=str, default='/opt/ml/input/data/training',
-                      help='Base data directory (default SageMaker location)')
+                        help='Base data directory (default SageMaker location)')
     parser.add_argument('--model-dir', type=str, default='/opt/ml/model',
-                      help='Directory to save the model (default SageMaker location)')
-    parser.add_argument('--checkpoint', type=str)
+                        help='Directory to save the model (default SageMaker location)')
+    parser.add_argument('--checkpoint', type=str,
+                        help='Checkpoint directory for saving models')
     return parser.parse_args()
 
 def generate_project_name(base_name):
@@ -43,12 +48,42 @@ def main():
         trainDEYOLOCLASS(args)
         
     elif args.model == 'vggfacergb':
-        from train_vggface import trainVGGFace      
+        from train_base import trainVGGFace      
         trainVGGFace(args, type_model='rgb')
     
     elif args.model == 'vggfacethermal':
-        from train_vggface import trainVGGFace      
+        from train_base import trainVGGFace      
         trainVGGFace(args, type_model='thermal')
+    
+    elif args.model == 'resnetrgb':
+        from train_base import train_model  # Reusing the train_model function
+        args.model_type = 'resnet'  # Set model type for train_model
+        train_model(args, type_model='rgb')
+    
+    elif args.model == 'resnetthermal':
+        from train_base import train_model
+        args.model_type = 'resnet'
+        train_model(args, type_model='thermal')
+    
+    elif args.model == 'shufflenetrgb':
+        from train_base import train_model
+        args.model_type = 'shufflenet'
+        train_model(args, type_model='rgb')
+    
+    elif args.model == 'shufflenetthermal':
+        from train_base import train_model
+        args.model_type = 'shufflenet'
+        train_model(args, type_model='thermal')
+    
+    elif args.model == 'mobilenetrgb':
+        from train_base import train_model
+        args.model_type = 'mobilenet'
+        train_model(args, type_model='rgb')
+    
+    elif args.model == 'mobilenetthermal':
+        from train_base import train_model
+        args.model_type = 'mobilenet'
+        train_model(args, type_model='thermal')
     
     print(f"Training completed for {args.model}")
 

@@ -45,23 +45,20 @@ def check_and_download_dataset():
     if not os.path.exists(DATASET_DIR):
         download_and_extract(DATASET_URL, DATASET_DIR)
 
-def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset/rgb", test_split=0.2, image_type="rgb"):
+def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset/rgb", image_type="rgb"):
     """
-    Returns the train and test DataLoaders for a dataset containing either RGB or thermal images.
+    Returns the train, validation, and test DataLoaders for a dataset containing either RGB or thermal images.
 
     Args:
         batch_size (int): Batch size for the dataloaders.
         image_dir (str): Directory containing the images.
-        test_split (float): Fraction of data to be used for testing.
         image_type (str): Type of images ("rgb" or "thermal").
 
     Returns:
         train_loader (DataLoader): DataLoader for training data.
+        val_loader (DataLoader): DataLoader for validation data.
         test_loader (DataLoader): DataLoader for testing data.
     """
-    #Checks if the dataset exists. If not, it downloads and extracts it
-    #check_and_download_dataset()
-
     # Define transformations (if any)
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
@@ -71,17 +68,23 @@ def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset
     # Create the dataset
     dataset = SingleImageDataset(image_dir=image_dir, image_type=image_type, transform=transform)
 
-    # Split dataset into training and testing
-    test_size = int(len(dataset) * test_split)
-    train_size = len(dataset) - test_size
+    # Split dataset into training (80%), validation (10%), and testing (10%)
+    train_size = int(0.8 * len(dataset))
+    val_size = int(0.1 * len(dataset))
+    test_size = len(dataset) - train_size - val_size
 
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    # Ensure the splits add up correctly
+    if train_size + val_size + test_size != len(dataset):
+        raise ValueError("Splits do not add up to the total dataset size.")
+
+    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
 
     # Create DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    return train_loader, test_loader
+    return train_loader, val_loader, test_loader
 
 class SingleImageDataset(Dataset):
     def __init__(self, image_dir, image_type="rgb", transform=None):
@@ -139,23 +142,23 @@ class SingleImageDataset(Dataset):
         return image, label
 
 
-def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb", thermal_dir="dataset/formatted_dataset/thermal", test_split=0.2):
+def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb", thermal_dir="dataset/formatted_dataset/thermal", train_split=0.8, val_split=0.1, test_split=0.1):
     """
-    Returns the train and test DataLoaders for the LPFW dataset with RGB and thermal images.
+    Returns the train, validation, and test DataLoaders for the LPFW dataset with RGB and thermal images.
     
     Args:
         batch_size (int): Batch size for the dataloaders.
         rgb_dir (str): Directory containing RGB images.
         thermal_dir (str): Directory containing thermal images.
+        train_split (float): Fraction of data to be used for training.
+        val_split (float): Fraction of data to be used for validation.
         test_split (float): Fraction of data to be used for testing.
     
     Returns:
         train_loader (DataLoader): DataLoader for training data.
+        val_loader (DataLoader): DataLoader for validation data.
         test_loader (DataLoader): DataLoader for testing data.
     """
-    #Checks if the dataset exists. If not, it downloads and extracts it
-    #check_and_download_dataset()
-    
     # Define transformations (if any)
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
@@ -165,17 +168,21 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
     # Create the dataset
     dataset = DualImageDataset(rgb_dir=rgb_dir, thermal_dir=thermal_dir, transform=transform)
 
-    # Split dataset into training and testing
-    test_size = int(len(dataset) * test_split)
-    train_size = len(dataset) - test_size
-    
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    # Calculate sizes for train, validation, and test splits
+    dataset_size = len(dataset)
+    train_size = int(dataset_size * train_split)
+    val_size = int(dataset_size * val_split)
+    test_size = dataset_size - train_size - val_size
+
+    # Split dataset into training, validation, and testing
+    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
 
     # Create DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    return train_loader, test_loader
+    return train_loader, val_loader, test_loader
 
 class DualImageDataset(Dataset):
     def __init__(self, rgb_dir, thermal_dir, transform=None):
