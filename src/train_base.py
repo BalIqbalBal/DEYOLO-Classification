@@ -241,7 +241,7 @@ def train_model(args, type_model):
             print(f"Checkpoint saved at {checkpoint_path}.")
 
     # Save the final model
-    final_model_path = os.path.join(args.model_dir, "model-final.pth")
+    final_model_path = os.path.join(checkpoint_dir, "model-final.pth")
     torch.save(model.state_dict(), final_model_path)
     print(f"Final model saved at {final_model_path}.")
 

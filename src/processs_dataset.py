@@ -1,4 +1,4 @@
-from utils.dataset_treatment import randomly_delete_files, rename_rgb_files, rename_thermal_files, sync_pipeline, crop_face_yolov5, sync_directories
+from utils.dataset_treatment import organize_files_by_label, randomly_delete_files, rename_rgb_files, rename_thermal_files, sync_pipeline, crop_face_yolov5, sync_directories
 
 #print("Crop Face")
 #crop_face_dlib("dataset/dataset_thermal", "dataset/dataset_face_thermal")
@@ -12,7 +12,7 @@ from utils.dataset_treatment import randomly_delete_files, rename_rgb_files, ren
 #randomly_delete_files("dataset", 0.75)
 #crop_face_custom_haar("dataset/Dataset_Thermal", "dataset/Crop_Dataset_Thermal", "face.xml")
 
-crop_face_yolov5("dataset/Dataset_Thermal", "dataset/Crop_Dataset_Thermal")
+#crop_face_yolov5("dataset/Dataset_Thermal", "dataset/Crop_Dataset_Thermal")
 
 #print("New dataset format")
-#organize_files_by_label("dataset/datasets_face_thermal", "dataset/datasets_face_rgb", "dataset/formatted_dataset/thermal", "dataset/formatted_dataset/rgb")
+organize_files_by_label("dataset/Crop_Dataset_Thermal", "dataset/datasets_zip_RGB_Face_Only", "dataset/formatted_dataset/thermal", "dataset/formatted_dataset/rgb")
