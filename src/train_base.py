@@ -37,27 +37,18 @@ def get_vggface_model(num_classes, pretrained=True, freeze=True):
     model.classifier[6] = nn.Linear(model.classifier[6].in_features, num_classes)
     return model
 
-def get_resnet_model(num_classes, pretrained=True, freeze=True):
+def get_resnet_model(num_classes, pretrained=False):
     model = models.resnet50(pretrained=pretrained)
-    if freeze:
-        for param in model.parameters():
-            param.requires_grad = False
     model.fc = nn.Linear(model.fc.in_features, num_classes)
     return model
 
-def get_shufflenet_model(num_classes, pretrained=True, freeze=True):
+def get_shufflenet_model(num_classes, pretrained=False):
     model = models.shufflenet_v2_x1_0(pretrained=pretrained)
-    if freeze:
-        for param in model.parameters():
-            param.requires_grad = False
     model.fc = nn.Linear(model.fc.in_features, num_classes)
     return model
 
-def get_mobilenet_model(num_classes, pretrained=True, freeze=True):
+def get_mobilenet_model(num_classes, pretrained=False):
     model = models.mobilenet_v2(pretrained=pretrained)
-    if freeze:
-        for param in model.parameters():
-            param.requires_grad = False
     model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
     return model
 
@@ -65,11 +56,11 @@ def get_model(model_type, num_classes, pretrained=True, freeze=True):
     if model_type == 'vgg':
         return get_vggface_model(num_classes, pretrained, freeze)
     elif model_type == 'resnet':
-        return get_resnet_model(num_classes, pretrained, freeze)
+        return get_resnet_model(num_classes, freeze, pretrained=False)
     elif model_type == 'shufflenet':
-        return get_shufflenet_model(num_classes, pretrained, freeze)
+        return get_shufflenet_model(num_classes, freeze, pretrained=False)
     elif model_type == 'mobilenet':
-        return get_mobilenet_model(num_classes, pretrained, freeze)
+        return get_mobilenet_model(num_classes, freeze, pretrained=False)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
