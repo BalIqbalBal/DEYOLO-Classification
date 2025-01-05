@@ -1,10 +1,12 @@
 import os
 import random
 import shutil
-#from facenet_pytorch import MTCNN
 from PIL import Image
 import cv2
 import numpy as np
+from yolov5 import YOLOv5
+from pathlib import Path
+
 
 def resize_image(image):
     width = int(image.shape[1])
@@ -14,54 +16,10 @@ def resize_image(image):
     resized = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
     return resized
 
-def crop_face_HOG(source_dir, target_dir):
-    # Inisialisasi detektor wajah HOG dari OpenCV
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+def crop_face_yolov5(source_dir, target_dir):
+    # Load YOLOv5 model
+    model = YOLOv5("utils/yolov5m.pt")  # Use a small YOLOv5 model; you can replace it with another model if needed
 
-    for root, _, files in os.walk(source_dir):
-        for file in files:
-            # Path lengkap file
-            source_path = os.path.join(root, file)
-            
-            # Path tujuan dengan mengganti parent directory
-            relative_path = os.path.relpath(source_path, source_dir)
-            target_path = os.path.join(target_dir, relative_path)
-            
-            # Pastikan direktori tujuan ada
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
-            
-            try:
-                # Buka gambar menggunakan OpenCV (untuk thermal image)
-                img = cv2.imread(source_path)
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)  # Konversi ke grayscale
-                
-                # Deteksi wajah
-                faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-
-                if len(faces) > 0:
-                    for i, (x, y, w, h) in enumerate(faces):
-                        # Crop wajah berdasarkan koordinat deteksi
-                        cropped_face = img[y:y+h, x:x+w]
-                        
-                        # Convert to RGB for saving with PIL
-                        cropped_face_pil = Image.fromarray(cv2.cvtColor(cropped_face, cv2.COLOR_BGR2RGB))
-                        
-                        # Nama file baru untuk wajah
-                        face_target_path = target_path.replace(".jpg", f"_face{i+1}.jpg")
-                        
-                        # Simpan wajah
-                        cropped_face_pil.save(face_target_path)
-                else:
-                    print(f"No face detected in {source_path}")
-            
-            except Exception as e:
-                print(f"Error processing {source_path}: {e}")
-
-"""
-def crop_face_mtcnn(source_dir, target_dir):
-    # Inisialisasi MTCNN
-    mtcnn = MTCNN(keep_all=True)
-    
     # List of valid image extensions
     valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']
 
@@ -86,28 +44,35 @@ def crop_face_mtcnn(source_dir, target_dir):
             
             try:
                 # Buka gambar
-                img = Image.open(source_path).convert("RGB")
+                img = Image.open(source_path)
                 
-                # Deteksi wajah
-                boxes, _ = mtcnn.detect(img)
+                # Convert image to numpy array for YOLOv5
+                img_np = np.array(img.convert("RGB"))
+
+                # Perform face detection using YOLOv5
+                results = model.predict(img_np)  # Use the `.predict()` method
                 
-                if boxes is not None:
-                    for i, box in enumerate(boxes):
-                        # Crop wajah berdasarkan bounding box
-                        cropped_face = img.crop(box)
+                # Extract detections from results
+                faces = results.xyxy[0]  # Bounding boxes for the first image
+                
+                if faces is not None and len(faces) > 0:
+                    for i, face in enumerate(faces):
+                        # Extract bounding box coordinates
+                        x1, y1, x2, y2 = map(int, face[:4])  # Convert to integers
                         
-                        # Nama file baru untuk wajah
-                        face_target_path = target_path.replace(".jpg", f"_face{i+1}.jpg")
+                        # Crop the face based on bounding box
+                        cropped_face = img.crop((x1, y1, x2, y2))
                         
-                        # Simpan wajah
+                        # Create target path for saving cropped face
+                        face_target_path = target_path
+                        
+                        # Save cropped face
                         cropped_face.save(face_target_path)
                 else:
-                    # Skip if no face is detected
-                    pass
+                    print(f"No face detected in {source_path}")
             
             except Exception as e:
                 print(f"Error processing {source_path}: {e}")
-"""
 
 def get_file_count(directory):
     """Mendapatkan jumlah file dalam direktori."""
@@ -256,7 +221,7 @@ def sync_pipeline(base_dir_thermal, base_dir_rgb):
                             continue
 
                         print(f"Renaming files in {label_dir_thermal} and {label_dir_rgb}")
-                        #rename_thermal_files(label_dir_thermal)
+                        rename_thermal_files(label_dir_thermal)
                         rename_rgb_files(label_dir_rgb)
 
     print("Synchronizing directories...")
@@ -373,5 +338,106 @@ def sync_folders(rgb_root, thermal_root):
     else:
         print("No files need to be removed. The directories are already synchronized.")
 
+def get_all_files(base_dir):
+    """
+    Recursively get all files in the base directory and its subdirectories.
+    """
+    base_dir = Path(base_dir)
+    return [file for file in base_dir.rglob('*') if file.is_file()]
 
+def remove_quarter_of_files_sync(base_dir1, base_dir2):
+    """
+    Remove 1/4 of the total files synchronously from both directories.
+    """
+    base_dir1 = Path(base_dir1)
+    base_dir2 = Path(base_dir2)
 
+    # Ensure both directories exist
+    if not base_dir1.exists() or not base_dir1.is_dir():
+        print(f"Error: {base_dir1} is not a valid directory.")
+        return
+    if not base_dir2.exists() or not base_dir2.is_dir():
+        print(f"Error: {base_dir2} is not a valid directory.")
+        return
+
+    # Get all files recursively from both directories
+    files_dir1 = get_all_files(base_dir1)
+    files_dir2 = get_all_files(base_dir2)
+
+    # Debug: Print total files in each directory
+    print(f"Total files in {base_dir1}: {len(files_dir1)}")
+    print(f"Total files in {base_dir2}: {len(files_dir2)}")
+
+    # Create a mapping of file names (without extensions) to their paths in both directories
+    file_map_dir1 = {file.stem: file for file in files_dir1}  # Use .stem to ignore extensions
+    file_map_dir2 = {file.stem: file for file in files_dir2}  # Use .stem to ignore extensions
+
+    # Find common files (files that exist in both directories, ignoring extensions)
+    common_files = set(file_map_dir1.keys()).intersection(file_map_dir2.keys())
+
+    # Debug: Print total common files
+    print(f"Total common files (ignoring extensions): {len(common_files)}")
+
+    # Convert to a list for random sampling
+    common_files = list(common_files)
+
+    # Calculate 1/4 of the total common files to remove
+    total_files = len(common_files)
+    files_to_remove_count = total_files // 4
+
+    # Debug: Print number of files to remove
+    print(f"Files to remove: {files_to_remove_count}")
+
+    # Randomly select files to remove
+    files_to_remove = random.sample(common_files, files_to_remove_count)
+
+    # Remove the selected files from both directories
+    for file_stem in files_to_remove:
+        file1 = file_map_dir1[file_stem]
+        file2 = file_map_dir2[file_stem]
+
+        try:
+            file1.unlink()  # Remove from base_dir1
+            print(f"Removed from {base_dir1}: {file1}")
+        except Exception as e:
+            print(f"Error removing {file1} from {base_dir1}: {e}")
+
+        try:
+            file2.unlink()  # Remove from base_dir2
+            print(f"Removed from {base_dir2}: {file2}")
+        except Exception as e:
+            print(f"Error removing {file2} from {base_dir2}: {e}")
+
+def randomly_delete_files(directory, delete_fraction=0.25):
+    """
+    Randomly delete a fraction of files in each folder.
+    Works recursively for all subdirectories.
+    """
+    directory = Path(directory)
+
+    # Ensure the directory exists
+    if not directory.exists() or not directory.is_dir():
+        print(f"Error: {directory} is not a valid directory.")
+        return
+
+    # Recursively traverse all subdirectories
+    for folder in directory.rglob('*'):
+        if folder.is_dir():
+            # Get all files in the folder
+            files = [file for file in folder.iterdir() if file.is_file()]
+
+            # Calculate the number of files to delete
+            num_files_to_delete = int(len(files) * delete_fraction)
+
+            # Randomly select files to delete
+            if num_files_to_delete > 0:
+                files_to_delete = random.sample(files, num_files_to_delete)
+                print(f"Folder {folder} has {len(files)} files. Deleting {num_files_to_delete} files randomly...")
+
+                # Delete the selected files
+                for file in files_to_delete:
+                    try:
+                        file.unlink()  # Delete the file
+                        print(f"Removed: {file}")
+                    except Exception as e:
+                        print(f"Error removing {file}: {e}")

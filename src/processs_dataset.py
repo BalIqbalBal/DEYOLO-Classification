@@ -1,4 +1,4 @@
-from utils.dataset_treatment import sync_pipeline, organize_files_by_label, crop_face_HOG, crop_face_mtcnn, sync_directories, crop_face_dlib
+from utils.dataset_treatment import randomly_delete_files, rename_rgb_files, rename_thermal_files, sync_pipeline, crop_face_yolov5, sync_directories
 
 #print("Crop Face")
 #crop_face_dlib("dataset/dataset_thermal", "dataset/dataset_face_thermal")
@@ -6,7 +6,13 @@ from utils.dataset_treatment import sync_pipeline, organize_files_by_label, crop
 
 #print("Fill Missing Image")
 #sync_pipeline("dataset/datasets_face_thermal", "dataset/datasets_face_rgb")
-sync_directories("dataset/datasets_face_thermal", "dataset/datasets_face_rgb")
+#sync_directories("dataset/datasets_face_thermal", "dataset/datasets_face_rgb")
+
+#sync_pipeline("dataset/Dataset_Thermal", "dataset/datasets_zip_RGB_Face_Only")
+#randomly_delete_files("dataset", 0.75)
+#crop_face_custom_haar("dataset/Dataset_Thermal", "dataset/Crop_Dataset_Thermal", "face.xml")
+
+crop_face_yolov5("dataset/Dataset_Thermal", "dataset/Crop_Dataset_Thermal")
 
 #print("New dataset format")
 #organize_files_by_label("dataset/datasets_face_thermal", "dataset/datasets_face_rgb", "dataset/formatted_dataset/thermal", "dataset/formatted_dataset/rgb")

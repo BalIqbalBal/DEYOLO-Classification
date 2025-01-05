@@ -6,7 +6,7 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from utils.datasets import getDualImageDataloader
 import argparse
-from model.DEYOLO import DEYOLOCLASS
+from model.DEYOLO import DEYOLOCLASS, SimpleDEYOLOCLASS
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -75,7 +75,8 @@ def trainDEYOLOCLASS(args):
     )
 
     # Define model
-    model = DEYOLOCLASS().to(device)
+    #model = DEYOLOCLASS().to(device)
+    model = SimpleDEYOLOCLASS.to(device)
 
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()

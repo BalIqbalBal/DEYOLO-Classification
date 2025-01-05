@@ -31,6 +31,81 @@ class DEYOLOCLASS(nn.Module):
         output = self.head(combined_features)
         return output
 
+class SimpleDEYOLOCLASS(nn.Module):
+    def __init__(self):
+        super(DEYOLOCLASS, self).__init__()
+
+        # Define the backbone for both RGB and Thermal inputs
+        self.rgb_backbone = DEYOLOBackbone()
+        self.thermal_backbone = DEYOLOBackbone()
+
+        # Define the simplified head module (only uses DEA for layers [9, 19])
+        self.head = SimpleHead()
+
+    def forward(self, rgb_image, thermal_image):
+        """
+        Forward pass for the DEYOLOCLASS model.
+
+        Args:
+            rgb_image (torch.Tensor): Input RGB image tensor.
+            thermal_image (torch.Tensor): Input thermal image tensor.
+
+        Returns:
+            torch.Tensor: Output logits from the classification head.
+        """
+        # Forward pass through the RGB backbone
+        rgb_features = self.rgb_backbone(rgb_image)  # Returns outputs from layers [11, 18, 22]
+        rgb_last_layer = rgb_features[-1]  # Extract the last layer's output (layer 22)
+
+        # Forward pass through the Thermal backbone
+        thermal_features = self.thermal_backbone(thermal_image)  # Returns outputs from layers [11, 18, 22]
+        thermal_last_layer = thermal_features[-1]  # Extract the last layer's output (layer 22)
+
+        # Combine the last layer's features from both modalities (Thermal and RGB)
+        combined_features = [
+            (rgb_last_layer, thermal_last_layer)  # Only the last layer's outputs are paired
+        ]
+
+        # Forward pass through the simplified head with the combined features
+        output = self.head(combined_features)
+        return output
+
+class SimpleHead(nn.Module):
+    def __init__(self):
+        super(SimpleHead, self).__init__()
+
+        # Define DEA module for attention (only for layers [9, 19])
+        self.dea = DEA(1024, 20)  # For layers [9, 19]
+
+        # Classification head
+        c1, c2 = 1024, 5  # Input channels for DEA output, output classes
+        self.conv = Conv(c1, 1280, 1, 1)  # EfficientNet-b0 size
+        self.pool = nn.AdaptiveAvgPool2d(1)  # Pool to shape (b, c_, 1, 1)
+        self.drop = nn.Dropout(p=0.2, inplace=True)  # Optional dropout
+        self.linear = nn.Linear(1280, c2)  # Final fully connected layer
+
+    def forward(self, backbone_outputs):
+        """
+        Forward pass of the SimpleHead module.
+
+        Args:
+            backbone_outputs (list): Combined outputs from RGB and thermal backbones.
+
+        Returns:
+            torch.Tensor: Classifier output.
+        """
+        # Apply DEA module (only for layers [9, 19])
+        attention = self.dea((backbone_outputs[2][0], backbone_outputs[2][1]))  # Layer pair [9, 19]
+
+        # Pass through the classification head
+        x = self.conv(attention)  # Shape: (batch, 1280, 20, 20)
+        x = self.pool(x)  # Shape: (batch, 1280, 1, 1)
+        x = x.flatten(1)  # Shape: (batch, 1280)
+        x = self.drop(x)  # Optional dropout
+        x = self.linear(x)  # Shape: (batch, 5)
+
+        return x
+
 class Head(nn.Module):
     def __init__(self):
         super(Head, self).__init__()
