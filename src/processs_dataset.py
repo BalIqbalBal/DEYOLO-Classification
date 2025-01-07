@@ -1,4 +1,4 @@
-from utils.dataset_treatment import delete_duplicate_images, organize_files_by_label, randomly_delete_files, rename_rgb_files, rename_thermal_files, sync_pipeline, crop_face_yolov5, sync_directories
+from utils.dataset_treatment import delete_duplicate_files_randomly, delete_duplicate_images, organize_files_by_label, randomly_delete_files, rename_rgb_files, rename_thermal_files, sync_pipeline, crop_face_yolov5, sync_directories
 
 #print("Crop Face")
 #crop_face_dlib("dataset/dataset_thermal", "dataset/dataset_face_thermal")
@@ -18,3 +18,4 @@ from utils.dataset_treatment import delete_duplicate_images, organize_files_by_l
 #organize_files_by_label("dataset/Crop_Dataset_Thermal", "dataset/datasets_zip_RGB_Face_Only", "dataset/formatted_dataset/thermal", "dataset/formatted_dataset/rgb")
 
 delete_duplicate_images("dataset/formatted_dataset", "dataset/reduce_formatted_dataset")
+delete_duplicate_files_randomly("dataset/reduce_formatted_dataset/rgb/label0", "dataset/reduce_formatted_dataset/thermal/label0", fraction=0.8)

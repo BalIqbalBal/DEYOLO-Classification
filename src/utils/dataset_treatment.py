@@ -482,3 +482,77 @@ def randomly_delete_files(directory, delete_fraction=0.25):
                         print(f"Removed: {file}")
                     except Exception as e:
                         print(f"Error removing {file}: {e}")
+
+def get_files_without_extensions(folder):
+    """
+    Get all files in a folder, ignoring extensions.
+
+    Args:
+        folder (str): Path to the folder.
+
+    Returns:
+        set: Set of filenames (without extensions).
+    """
+    files = set()
+    for file in os.listdir(folder):
+        if not file.startswith('.'):  # Ignore hidden files
+            base_name = os.path.splitext(file)[0].lower()  # Remove extension and normalize to lowercase
+            files.add(base_name)
+    return files
+
+def delete_duplicate_files_randomly(folder1, folder2, fraction=0.5):
+    """
+    Randomly deletes a fraction of files with the same name (ignoring extensions) in two folders.
+
+    Args:
+        folder1 (str): Path to the first folder.
+        folder2 (str): Path to the second folder.
+        fraction (float): Fraction of duplicate files to delete (default: 0.5).
+    """
+    # Get files in both folders (ignoring extensions)
+    files1 = get_files_without_extensions(folder1)
+    files2 = get_files_without_extensions(folder2)
+
+    # Debug: Print files in each folder
+    print("Files in folder1 (without extensions):", files1)
+    print("Files in folder2 (without extensions):", files2)
+
+    # Find files with the same name (ignoring extensions) in both folders
+    duplicate_files = list(files1.intersection(files2))  # Convert to list for random sampling
+
+    if not duplicate_files:
+        print("No duplicate files found.")
+        return
+
+    print(f"Found {len(duplicate_files)} duplicate files (ignoring extensions).")
+
+    # Calculate the number of files to delete based on the fraction
+    num_files_to_delete = int(len(duplicate_files) * fraction)
+    print(f"Deleting {num_files_to_delete} out of {len(duplicate_files)} duplicate files from both folders.")
+
+    # Randomly select files to delete
+    files_to_delete = random.sample(duplicate_files, num_files_to_delete)
+
+    # Delete the selected files from both folders
+    for file in files_to_delete:
+        # Delete from folder1
+        for f in os.listdir(folder1):
+            base_name = os.path.splitext(f)[0].lower()
+            if base_name == file:
+                file_path = os.path.join(folder1, f)
+                try:
+                    os.remove(file_path)
+                    print(f"Deleted {f} from {folder1}")
+                except Exception as e:
+                    print(f"Error removing {f} from {folder1}: {e}")
+
+        # Delete from folder2
+        for f in os.listdir(folder2):
+            base_name = os.path.splitext(f)[0].lower()
+            if base_name == file:
+                file_path = os.path.join(folder2, f)
+                try:
+                    os.remove(file_path)
+                    print(f"Deleted {f} from {folder2}")
+                except Exception as e:
+                    print(f"Error removing {f} from {folder2}: {e}")

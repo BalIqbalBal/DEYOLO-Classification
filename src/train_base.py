@@ -253,17 +253,18 @@ def train_model(args, type_model):
     class_names = [f"Class {i}" for i in range(num_classes)]  # Replace with actual class names if available
     model = get_model(args.model_type, num_classes, dropout_rate=args.dropout_rate).to(device)
 
-    # Calculate class weights for Focal Loss
-    labels = [label for _, label in train_loader.dataset]  # Extract labels from the dataset
-    class_counts = torch.bincount(torch.tensor(labels))
-    class_weights = 1.0 / class_counts.float()  # Inverse of class frequency
+    # Manually set weights for each class
+    class_weights = torch.tensor([0.1, 0.225, 0.225, 0.225, 0.225])  # Original weights
 
-    # Manually adjust the weight for class 0 to make it harder to learn
-    class_weights[0] = 0.1  # Reduce the weight for class 0 (you can adjust this value)
+    # Make Class 0 weight 5 times smaller
+    class_weights[0] = class_weights[0] / 1  # Reduce weight for Class 0
 
     # Normalize weights so they sum to 1
     class_weights = class_weights / class_weights.sum()
+    print("Adjusted class weights:", class_weights)
+
     class_weights = class_weights.to(device)
+
 
     # Initialize Focal Loss with adjusted class weights
     criterion = FocalLoss(alpha=class_weights, gamma=2.0)
