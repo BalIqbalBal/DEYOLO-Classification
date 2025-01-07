@@ -6,7 +6,48 @@ import cv2
 import numpy as np
 from yolov5 import YOLOv5
 from pathlib import Path
+import imagehash
 
+def delete_duplicate_images(source_folder, destination_folder):
+    # Create the destination folder if it doesn't exist
+    if not os.path.exists(destination_folder):
+        os.makedirs(destination_folder)
+
+    # Dictionary to store image hashes
+    image_hashes = {}
+
+    # Walk through all subfolders and files in the source folder
+    for root, dirs, files in os.walk(source_folder):
+        for filename in files:
+            file_path = os.path.join(root, filename)
+
+            # Skip if it's not an image file
+            if not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff')):
+                continue
+
+            try:
+                # Open the image and compute its hash
+                with Image.open(file_path) as img:
+                    img_hash = imagehash.average_hash(img)
+
+                # Check if the hash already exists (i.e., duplicate image)
+                if img_hash in image_hashes:
+                    print(f"Duplicate found: {file_path} (same as {image_hashes[img_hash]})")
+                else:
+                    # Store the hash and move the image to the destination folder
+                    image_hashes[img_hash] = file_path
+                    # Create a relative path for the destination folder
+                    relative_path = os.path.relpath(root, source_folder)
+                    dest_subfolder = os.path.join(destination_folder, relative_path)
+                    # Create the subfolder in the destination folder if it doesn't exist
+                    if not os.path.exists(dest_subfolder):
+                        os.makedirs(dest_subfolder)
+                    # Move the image to the corresponding subfolder in the destination folder
+                    shutil.move(file_path, os.path.join(dest_subfolder, filename))
+                    print(f"Moved unique image: {file_path} to {dest_subfolder}")
+
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
 
 def resize_image(image):
     width = int(image.shape[1])

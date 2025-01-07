@@ -257,10 +257,15 @@ def train_model(args, type_model):
     labels = [label for _, label in train_loader.dataset]  # Extract labels from the dataset
     class_counts = torch.bincount(torch.tensor(labels))
     class_weights = 1.0 / class_counts.float()  # Inverse of class frequency
-    class_weights = class_weights / class_weights.sum()  # Normalize weights
+
+    # Manually adjust the weight for class 0 to make it harder to learn
+    class_weights[0] = 0.1  # Reduce the weight for class 0 (you can adjust this value)
+
+    # Normalize weights so they sum to 1
+    class_weights = class_weights / class_weights.sum()
     class_weights = class_weights.to(device)
 
-    # Initialize Focal Loss with class weights
+    # Initialize Focal Loss with adjusted class weights
     criterion = FocalLoss(alpha=class_weights, gamma=2.0)
 
     # Optimizer with weight decay
