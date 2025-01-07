@@ -25,6 +25,8 @@ def parse_args():
     parser.add_argument('--lr-decay-step', type=int, default=10, help="Step size for learning rate decay (in epochs).")
     parser.add_argument('--lr-decay-gamma', type=float, default=0.1, help="Factor by which to decay the learning rate.")
     parser.add_argument('--early-stopping-patience', type=int, default=5, help="Number of epochs to wait before stopping if validation accuracy doesn't improve.")
+    parser.add_argument('--weight-decay', type=float, default=1e-5, help="Weight decay (L2 regularization) strength.")
+    parser.add_argument('--dropout-rate', type=float, default=0.5, help="Dropout rate for regularization.")
     
     # SageMaker parameters
     parser.add_argument('--project-name', type=str)
@@ -35,39 +37,60 @@ def parse_args():
 
     return parser.parse_args()
 
-# Define model loading functions
-def get_vggface_model(num_classes, pretrained=True, freeze=True):
+# Define model loading functions with dropout
+def get_vggface_model(num_classes, pretrained=True, freeze=True, dropout_rate=0.5):
     model = models.vgg16(pretrained=pretrained)
     if freeze:
         for param in model.features.parameters():
             param.requires_grad = False
-    model.classifier[6] = nn.Linear(model.classifier[6].in_features, num_classes)
+    model.classifier = nn.Sequential(
+        nn.Linear(25088, 4096),
+        nn.ReLU(inplace=True),
+        nn.Dropout(dropout_rate),  # Add dropout
+        nn.Linear(4096, 4096),
+        nn.ReLU(inplace=True),
+        nn.Dropout(dropout_rate),  # Add dropout
+        nn.Linear(4096, num_classes),
+    )
     return model
 
-def get_resnet_model(num_classes, pretrained=False):
+def get_resnet_model(num_classes, pretrained=False, dropout_rate=0.5):
     model = models.resnet50(pretrained=pretrained)
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
+    model.fc = nn.Sequential(
+        nn.Linear(model.fc.in_features, 512),
+        nn.ReLU(inplace=True),
+        nn.Dropout(dropout_rate),  # Add dropout
+        nn.Linear(512, num_classes),
+    )
     return model
 
-def get_shufflenet_model(num_classes, pretrained=False):
+def get_shufflenet_model(num_classes, pretrained=False, dropout_rate=0.5):
     model = models.shufflenet_v2_x1_0(pretrained=pretrained)
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
+    model.fc = nn.Sequential(
+        nn.Linear(model.fc.in_features, 512),
+        nn.ReLU(inplace=True),
+        nn.Dropout(dropout_rate),  # Add dropout
+        nn.Linear(512, num_classes),
+    )
     return model
 
-def get_mobilenet_model(num_classes, pretrained=False):
+def get_mobilenet_model(num_classes, pretrained=False, dropout_rate=0.5):
     model = models.mobilenet_v2(pretrained=pretrained)
-    model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
+    model.classifier = nn.Sequential(
+        nn.Dropout(dropout_rate),  # Add dropout
+        nn.Linear(model.classifier[1].in_features, num_classes),
+    )
     return model
 
-def get_model(model_type, num_classes, pretrained=True, freeze=True):
+def get_model(model_type, num_classes, pretrained=True, freeze=True, dropout_rate=0.5):
     if model_type == 'vgg':
-        return get_vggface_model(num_classes, pretrained, freeze)
+        return get_vggface_model(num_classes, pretrained, freeze, dropout_rate)
     elif model_type == 'resnet':
-        return get_resnet_model(num_classes, pretrained)
+        return get_resnet_model(num_classes, pretrained, dropout_rate)
     elif model_type == 'shufflenet':
-        return get_shufflenet_model(num_classes, pretrained)
+        return get_shufflenet_model(num_classes, pretrained, dropout_rate)
     elif model_type == 'mobilenet':
-        return get_mobilenet_model(num_classes, pretrained)
+        return get_mobilenet_model(num_classes, pretrained, dropout_rate)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -227,8 +250,8 @@ def train_model(args, type_model):
     )
 
     num_classes = 5
-    class_names = [f"Label {i}" for i in range(num_classes)]  # Replace with actual class names if available
-    model = get_model(args.model_type, num_classes).to(device)
+    class_names = [f"Class {i}" for i in range(num_classes)]  # Replace with actual class names if available
+    model = get_model(args.model_type, num_classes, dropout_rate=args.dropout_rate).to(device)
 
     # Calculate class weights for Focal Loss
     labels = [label for _, label in train_loader.dataset]  # Extract labels from the dataset
@@ -240,8 +263,8 @@ def train_model(args, type_model):
     # Initialize Focal Loss with class weights
     criterion = FocalLoss(alpha=class_weights, gamma=2.0)
 
-    # Optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    # Optimizer with weight decay
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
     # Learning rate scheduler
     scheduler = torch.optim.lr_scheduler.StepLR(
@@ -279,7 +302,7 @@ def train_model(args, type_model):
 
         # Save checkpoint every `save_interval` epochs
         if (epoch + 1) % save_interval == 0:
-            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch.pth")
+            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch + 1}.pth")
             torch.save(model.state_dict(), checkpoint_path)
             print(f"Checkpoint saved at {checkpoint_path}.")
 

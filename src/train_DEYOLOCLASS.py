@@ -23,6 +23,8 @@ def parse_args():
     parser.add_argument('--lr-decay-step', type=int, default=10, help="Step size for learning rate decay (in epochs).")
     parser.add_argument('--lr-decay-gamma', type=float, default=0.1, help="Factor by which to decay the learning rate.")
     parser.add_argument('--early-stopping-patience', type=int, default=5, help="Number of epochs to wait before stopping if validation accuracy doesn't improve.")
+    parser.add_argument('--weight-decay', type=float, default=1e-5, help="Weight decay (L2 regularization) strength.")
+    parser.add_argument('--dropout-rate', type=float, default=0.5, help="Dropout rate for regularization.")
     
     # SageMaker parameters
     parser.add_argument('--project-name', type=str)
@@ -81,7 +83,7 @@ def trainDEYOLOCLASS(args):
 
     # Define model
     #model = DEYOLOCLASS().to(device)
-    model = SimpleDEYOLOCLASS.to(device)
+    model = SimpleDEYOLOCLASS(dropout_rate=args.dropout_rate).to(device)  # Add dropout to the model
 
     num_classes = 5
     class_names = [f"Label {i}" for i in range(num_classes)]  # Replace with actual class names if available
@@ -96,8 +98,8 @@ def trainDEYOLOCLASS(args):
     # Initialize Focal Loss with class weights
     criterion = FocalLoss(alpha=class_weights, gamma=2.0)
 
-    # Optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    # Optimizer with weight decay
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
     # Learning rate scheduler
     scheduler = torch.optim.lr_scheduler.StepLR(

@@ -31,16 +31,20 @@ class DEYOLOCLASS(nn.Module):
         output = self.head(combined_features)
         return output
 
+
 class SimpleDEYOLOCLASS(nn.Module):
-    def __init__(self):
-        super(DEYOLOCLASS, self).__init__()
+    def __init__(self, dropout_rate=0.2):
+        super(SimpleDEYOLOCLASS, self).__init__()
 
         # Define the backbone for both RGB and Thermal inputs
         self.rgb_backbone = DEYOLOBackbone()
         self.thermal_backbone = DEYOLOBackbone()
 
+        # Define dropout layers
+        self.dropout = nn.Dropout(p=dropout_rate)
+
         # Define the simplified head module (only uses DEA for layers [9, 19])
-        self.head = SimpleHead()
+        self.head = SimpleHead(dropout_rate=dropout_rate)
 
     def forward(self, rgb_image, thermal_image):
         """
@@ -61,6 +65,10 @@ class SimpleDEYOLOCLASS(nn.Module):
         thermal_features = self.thermal_backbone(thermal_image)  # Returns outputs from layers [11, 18, 22]
         thermal_last_layer = thermal_features[-1]  # Extract the last layer's output (layer 22)
 
+        # Apply dropout to the last layer's features
+        rgb_last_layer = self.dropout(rgb_last_layer)
+        thermal_last_layer = self.dropout(thermal_last_layer)
+
         # Combine the last layer's features from both modalities (Thermal and RGB)
         combined_features = [
             (rgb_last_layer, thermal_last_layer)  # Only the last layer's outputs are paired
@@ -71,7 +79,7 @@ class SimpleDEYOLOCLASS(nn.Module):
         return output
 
 class SimpleHead(nn.Module):
-    def __init__(self):
+    def __init__(self, dropout_rate=0.2):
         super(SimpleHead, self).__init__()
 
         # Define DEA module for attention (only for layers [9, 19])
@@ -81,7 +89,7 @@ class SimpleHead(nn.Module):
         c1, c2 = 1024, 5  # Input channels for DEA output, output classes
         self.conv = Conv(c1, 1280, 1, 1)  # EfficientNet-b0 size
         self.pool = nn.AdaptiveAvgPool2d(1)  # Pool to shape (b, c_, 1, 1)
-        self.drop = nn.Dropout(p=0.2, inplace=True)  # Optional dropout
+        self.drop = nn.Dropout(p=dropout_rate, inplace=True)  # Dropout with the specified rate
         self.linear = nn.Linear(1280, c2)  # Final fully connected layer
 
     def forward(self, backbone_outputs):
@@ -101,10 +109,8 @@ class SimpleHead(nn.Module):
         x = self.conv(attention)  # Shape: (batch, 1280, 20, 20)
         x = self.pool(x)  # Shape: (batch, 1280, 1, 1)
         x = x.flatten(1)  # Shape: (batch, 1280)
-        x = self.drop(x)  # Optional dropout
-        x = self.linear(x)  # Shape: (batch, 5)
-
-        return x
+        x = self.drop(x)  # Apply dropout
+        x = self.linear
 
 class Head(nn.Module):
     def __init__(self):

@@ -49,7 +49,7 @@ def check_and_download_dataset():
 def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset/rgb", image_type="rgb"):
     """
     Returns the train, validation, and test DataLoaders for a dataset containing either RGB or thermal images.
-    Automatically balances the dataset using class weights.
+    Automatically balances the dataset using class weights and applies data augmentation to the training set.
 
     Args:
         batch_size (int): Batch size for the dataloaders.
@@ -61,28 +61,38 @@ def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset
         val_loader (DataLoader): DataLoader for validation data.
         test_loader (DataLoader): DataLoader for testing data.
     """
-    # Define transformations (if any)
-    transform = transforms.Compose([
+    # Define transformations
+    train_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.RandomHorizontalFlip(),  # Randomly flip the image horizontally
+        transforms.RandomRotation(15),     # Randomly rotate the image by up to 15 degrees
+        transforms.ToTensor(),             # Convert the image to a tensor
+    ])
+
+    # Validation and test transformations (no augmentation)
+    val_test_transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
     ])
 
     # Create the dataset
-    dataset = SingleImageDataset(image_dir=image_dir, image_type=image_type, transform=transform)
+    train_dataset = SingleImageDataset(image_dir=image_dir, image_type=image_type, transform=train_transform)
+    val_test_dataset = SingleImageDataset(image_dir=image_dir, image_type=image_type, transform=val_test_transform)
 
     # Split dataset into training (80%), validation (10%), and testing (10%)
-    train_size = int(0.8 * len(dataset))
-    val_size = int(0.1 * len(dataset))
-    test_size = len(dataset) - train_size - val_size
+    dataset_size = len(train_dataset)
+    train_size = int(0.8 * dataset_size)
+    val_size = int(0.1 * dataset_size)
+    test_size = dataset_size - train_size - val_size
 
     # Ensure the splits add up correctly
-    if train_size + val_size + test_size != len(dataset):
+    if train_size + val_size + test_size != dataset_size:
         raise ValueError("Splits do not add up to the total dataset size.")
 
-    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
+    train_dataset, val_dataset, test_dataset = random_split(val_test_dataset, [train_size, val_size, test_size])
 
     # Calculate class weights for the training dataset
-    labels = [dataset[i][1] for i in range(len(dataset))]  # Assuming the dataset returns (image, label)
+    labels = [train_dataset[i][1] for i in range(len(train_dataset))]  # Assuming the dataset returns (image, label)
     class_counts = Counter(labels)
     class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
     sample_weights = [class_weights[labels[i]] for i in range(len(train_dataset))]
@@ -156,7 +166,7 @@ class SingleImageDataset(Dataset):
 def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb", thermal_dir="dataset/formatted_dataset/thermal", train_split=0.8, val_split=0.1, test_split=0.1):
     """
     Returns the train, validation, and test DataLoaders for the LPFW dataset with RGB and thermal images.
-    Automatically balances the dataset using class weights.
+    Automatically balances the dataset using class weights and applies data augmentation to the training set.
 
     Args:
         batch_size (int): Batch size for the dataloaders.
@@ -171,26 +181,35 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
         val_loader (DataLoader): DataLoader for validation data.
         test_loader (DataLoader): DataLoader for testing data.
     """
-    # Define transformations (if any)
-    transform = transforms.Compose([
+    # Define transformations
+    train_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.RandomHorizontalFlip(),  # Randomly flip the image horizontally
+        transforms.RandomRotation(15),     # Randomly rotate the image by up to 15 degrees 
+        transforms.ToTensor(),             # Convert the image to a tensor
+    ])
+
+    # Validation and test transformations (no augmentation)
+    val_test_transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
     ])
 
     # Create the dataset
-    dataset = DualImageDataset(rgb_dir=rgb_dir, thermal_dir=thermal_dir, transform=transform)
+    train_dataset = DualImageDataset(rgb_dir=rgb_dir, thermal_dir=thermal_dir, transform=train_transform)
+    val_test_dataset = DualImageDataset(rgb_dir=rgb_dir, thermal_dir=thermal_dir, transform=val_test_transform)
 
     # Calculate sizes for train, validation, and test splits
-    dataset_size = len(dataset)
+    dataset_size = len(train_dataset)
     train_size = int(dataset_size * train_split)
     val_size = int(dataset_size * val_split)
     test_size = dataset_size - train_size - val_size
 
     # Split dataset into training, validation, and testing
-    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
+    train_dataset, val_dataset, test_dataset = random_split(val_test_dataset, [train_size, val_size, test_size])
 
     # Calculate class weights for the training dataset
-    labels = [dataset[i][1] for i in range(len(dataset))]  # Assuming the dataset returns (rgb_image, thermal_image, label)
+    labels = [train_dataset[i][1] for i in range(len(train_dataset))]  # Assuming the dataset returns (rgb_image, thermal_image, label)
     class_counts = Counter(labels)
     class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
     sample_weights = [class_weights[labels[i]] for i in range(len(train_dataset))]
