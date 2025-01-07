@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument('--model-type', type=str, default='vgg', choices=['vgg', 'resnet', 'shufflenet', 'mobilenet'])
     parser.add_argument('--lr-decay-step', type=int, default=10, help="Step size for learning rate decay (in epochs).")
     parser.add_argument('--lr-decay-gamma', type=float, default=0.1, help="Factor by which to decay the learning rate.")
+    parser.add_argument('--early-stopping-patience', type=int, default=5, help="Number of epochs to wait before stopping if validation accuracy doesn't improve.")
     
     # SageMaker parameters
     parser.add_argument('--project-name', type=str)
@@ -226,7 +227,7 @@ def train_model(args, type_model):
     )
 
     num_classes = 5
-    class_names = [f"Class {i}" for i in range(num_classes)]  # Replace with actual class names if available
+    class_names = [f"Label {i}" for i in range(num_classes)]  # Replace with actual class names if available
     model = get_model(args.model_type, num_classes).to(device)
 
     # Calculate class weights for Focal Loss
@@ -249,21 +250,36 @@ def train_model(args, type_model):
         gamma=args.lr_decay_gamma
     )
 
-    save_interval = 5
+    # Early stopping
     best_accuracy = 0.0
+    epochs_without_improvement = 0
+    early_stopping_patience = args.early_stopping_patience
+
+    save_interval = 5
 
     for epoch in range(args.num_epochs):
         print(f"Epoch {epoch + 1}/{args.num_epochs}")
         train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names)
         val_accuracy, cm = evaluate(model, val_loader, criterion, epoch, writer, device, class_names, stage="Val")
 
+        # Check for improvement in validation accuracy
         if val_accuracy > best_accuracy:
             best_accuracy = val_accuracy
+            epochs_without_improvement = 0
             torch.save(model.state_dict(), os.path.join(checkpoint_dir, "best_model.pth"))
             print(f"New best accuracy: {best_accuracy:.4f}. Best model saved.")
-        
+        else:
+            epochs_without_improvement += 1
+            print(f"No improvement in validation accuracy for {epochs_without_improvement} epochs.")
+
+        # Early stopping check
+        if epochs_without_improvement >= early_stopping_patience:
+            print(f"Early stopping triggered after {epoch + 1} epochs. No improvement for {early_stopping_patience} epochs.")
+            break
+
+        # Save checkpoint every `save_interval` epochs
         if (epoch + 1) % save_interval == 0:
-            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch + 1}.pth")
+            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch.pth")
             torch.save(model.state_dict(), checkpoint_path)
             print(f"Checkpoint saved at {checkpoint_path}.")
 

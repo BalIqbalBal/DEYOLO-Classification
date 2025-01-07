@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument('--batch-size', type=int, default=15)
     parser.add_argument('--lr-decay-step', type=int, default=10, help="Step size for learning rate decay (in epochs).")
     parser.add_argument('--lr-decay-gamma', type=float, default=0.1, help="Factor by which to decay the learning rate.")
+    parser.add_argument('--early-stopping-patience', type=int, default=5, help="Number of epochs to wait before stopping if validation accuracy doesn't improve.")
     
     # SageMaker parameters
     parser.add_argument('--project-name', type=str)
@@ -82,6 +83,9 @@ def trainDEYOLOCLASS(args):
     #model = DEYOLOCLASS().to(device)
     model = SimpleDEYOLOCLASS.to(device)
 
+    num_classes = 5
+    class_names = [f"Label {i}" for i in range(num_classes)]  # Replace with actual class names if available
+
     # Calculate class weights for Focal Loss
     labels = [label for _, _, label in train_loader.dataset]  # Extract labels from the dataset
     class_counts = torch.bincount(torch.tensor(labels))
@@ -102,13 +106,12 @@ def trainDEYOLOCLASS(args):
         gamma=args.lr_decay_gamma
     )
 
-    # Training loop
-    save_interval = 5
+    # Early stopping
     best_accuracy = 0.0
+    epochs_without_improvement = 0
+    early_stopping_patience = args.early_stopping_patience
 
-    # Class names for confusion matrix
-    num_classes = 5  # Update this based on your dataset
-    class_names = [f"Class {i}" for i in range(num_classes)]  # Replace with actual class names if available
+    save_interval = 5
 
     for epoch in range(args.num_epochs):
         print(f"Epoch {epoch + 1}/{args.num_epochs}")
@@ -122,24 +125,33 @@ def trainDEYOLOCLASS(args):
         # Save checkpoint if validation accuracy improves
         if val_accuracy > best_accuracy:
             best_accuracy = val_accuracy
+            epochs_without_improvement = 0
             model_path = os.path.join(checkpoint_dir, "best_model.pth")
             torch.save(model.state_dict(), model_path)
             print(f"New best validation accuracy: {best_accuracy:.4f}. Best model saved to {model_path}")
-        
+        else:
+            epochs_without_improvement += 1
+            print(f"No improvement in validation accuracy for {epochs_without_improvement} epochs.")
+
+        # Early stopping check
+        if epochs_without_improvement >= early_stopping_patience:
+            print(f"Early stopping triggered after {epoch + 1} epochs. No improvement for {early_stopping_patience} epochs.")
+            break
+
         # Save checkpoint every `save_interval` epochs
         if (epoch + 1) % save_interval == 0:
             checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch + 1}.pth")
             torch.save(model.state_dict(), checkpoint_path)
-            print(f"Checkpoint saved at {checkpoint_path}")
+            print(f"Checkpoint saved at {checkpoint_path}.")
 
         # Step the learning rate scheduler
         scheduler.step()
         print(f"Learning rate updated to: {scheduler.get_last_lr()[0]:.6f}")
 
-    # Save final model
+    # Save the final model
     final_model_path = os.path.join(checkpoint_dir, "model-final.pth")
     torch.save(model.state_dict(), final_model_path)
-    print(f"Final model saved at {final_model_path}")
+    print(f"Final model saved at {final_model_path}.")
 
     # Test the model on the test set
     print("\nTesting the model on the test dataset...")
