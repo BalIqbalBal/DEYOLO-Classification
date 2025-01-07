@@ -3,8 +3,9 @@ import requests
 import zipfile
 from io import BytesIO
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, random_split, WeightedRandomSampler
 from torchvision import transforms
+from collections import Counter
 
 import os
 from PIL import Image
@@ -48,6 +49,7 @@ def check_and_download_dataset():
 def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset/rgb", image_type="rgb"):
     """
     Returns the train, validation, and test DataLoaders for a dataset containing either RGB or thermal images.
+    Automatically balances the dataset using class weights.
 
     Args:
         batch_size (int): Batch size for the dataloaders.
@@ -79,8 +81,17 @@ def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset
 
     train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
 
+    # Calculate class weights for the training dataset
+    labels = [dataset[i][1] for i in range(len(dataset))]  # Assuming the dataset returns (image, label)
+    class_counts = Counter(labels)
+    class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
+    sample_weights = [class_weights[labels[i]] for i in range(len(train_dataset))]
+
+    # Create WeightedRandomSampler
+    sampler = WeightedRandomSampler(sample_weights, len(sample_weights), replacement=True)
+
     # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
@@ -145,7 +156,8 @@ class SingleImageDataset(Dataset):
 def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb", thermal_dir="dataset/formatted_dataset/thermal", train_split=0.8, val_split=0.1, test_split=0.1):
     """
     Returns the train, validation, and test DataLoaders for the LPFW dataset with RGB and thermal images.
-    
+    Automatically balances the dataset using class weights.
+
     Args:
         batch_size (int): Batch size for the dataloaders.
         rgb_dir (str): Directory containing RGB images.
@@ -153,7 +165,7 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
         train_split (float): Fraction of data to be used for training.
         val_split (float): Fraction of data to be used for validation.
         test_split (float): Fraction of data to be used for testing.
-    
+
     Returns:
         train_loader (DataLoader): DataLoader for training data.
         val_loader (DataLoader): DataLoader for validation data.
@@ -177,12 +189,22 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
     # Split dataset into training, validation, and testing
     train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
 
+    # Calculate class weights for the training dataset
+    labels = [dataset[i][1] for i in range(len(dataset))]  # Assuming the dataset returns (rgb_image, thermal_image, label)
+    class_counts = Counter(labels)
+    class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
+    sample_weights = [class_weights[labels[i]] for i in range(len(train_dataset))]
+
+    # Create WeightedRandomSampler
+    sampler = WeightedRandomSampler(sample_weights, len(sample_weights), replacement=True)
+
     # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     return train_loader, val_loader, test_loader
+
 
 class DualImageDataset(Dataset):
     def __init__(self, rgb_dir, thermal_dir, transform=None):

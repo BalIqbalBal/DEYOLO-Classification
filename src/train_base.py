@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+from utils.loss import FocalLoss
+
+# Parse command-line arguments
 def parse_args():
     parser = argparse.ArgumentParser()
     
@@ -29,6 +32,7 @@ def parse_args():
 
     return parser.parse_args()
 
+# Define model loading functions
 def get_vggface_model(num_classes, pretrained=True, freeze=True):
     model = models.vgg16(pretrained=pretrained)
     if freeze:
@@ -56,14 +60,15 @@ def get_model(model_type, num_classes, pretrained=True, freeze=True):
     if model_type == 'vgg':
         return get_vggface_model(num_classes, pretrained, freeze)
     elif model_type == 'resnet':
-        return get_resnet_model(num_classes, freeze, pretrained=False)
+        return get_resnet_model(num_classes, pretrained)
     elif model_type == 'shufflenet':
-        return get_shufflenet_model(num_classes, freeze, pretrained=False)
+        return get_shufflenet_model(num_classes, pretrained)
     elif model_type == 'mobilenet':
-        return get_mobilenet_model(num_classes, freeze, pretrained=False)
+        return get_mobilenet_model(num_classes, pretrained)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
+# Log confusion matrix to TensorBoard
 def log_confusion_matrix(writer, cm, class_names, epoch, stage):
     """
     Logs the confusion matrix to TensorBoard as a figure.
@@ -83,6 +88,7 @@ def log_confusion_matrix(writer, cm, class_names, epoch, stage):
     writer.add_figure(f"{stage}/Confusion_Matrix", fig, epoch)
     plt.close(fig)
 
+# Training loop for one epoch
 def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names):
     model.train()
     total_loss = 0.0
@@ -133,6 +139,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
 
     return acc
 
+# Evaluation function
 def evaluate(model, data_loader, criterion, epoch, writer, device, class_names, stage="Val"):
     """
     Evaluate the model on a given dataset.
@@ -194,6 +201,7 @@ def evaluate(model, data_loader, criterion, epoch, writer, device, class_names, 
 
     return acc, cm
 
+# Main training function
 def train_model(args, type_model):
     writer = SummaryWriter(os.path.join(args.checkpoint, args.project_name))
     checkpoint_dir = os.path.join(args.checkpoint, args.project_name)
@@ -219,7 +227,16 @@ def train_model(args, type_model):
     class_names = [f"Class {i}" for i in range(num_classes)]  # Replace with actual class names if available
     model = get_model(args.model_type, num_classes).to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    # Calculate class weights for Focal Loss
+    labels = [label for _, label in train_loader.dataset]  # Extract labels from the dataset
+    class_counts = torch.bincount(torch.tensor(labels))
+    class_weights = 1.0 / class_counts.float()  # Inverse of class frequency
+    class_weights = class_weights / class_weights.sum()  # Normalize weights
+    class_weights = class_weights.to(device)
+
+    # Initialize Focal Loss with class weights
+    criterion = FocalLoss(alpha=class_weights, gamma=2.0)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
     save_interval = 5
@@ -254,6 +271,7 @@ def train_model(args, type_model):
 
     writer.close()
 
+# Entry point
 if __name__ == "__main__":
     args = parse_args()
     train_model(args, type_model='rgb')

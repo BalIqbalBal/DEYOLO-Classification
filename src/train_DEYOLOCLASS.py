@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+from utils.loss import FocalLoss
+
 def parse_args():
     parser = argparse.ArgumentParser()
     
@@ -78,8 +80,17 @@ def trainDEYOLOCLASS(args):
     #model = DEYOLOCLASS().to(device)
     model = SimpleDEYOLOCLASS.to(device)
 
-    # Loss and optimizer
-    criterion = nn.CrossEntropyLoss()
+    # Calculate class weights for Focal Loss
+    labels = [label for _, _, label in train_loader.dataset]  # Extract labels from the dataset
+    class_counts = torch.bincount(torch.tensor(labels))
+    class_weights = 1.0 / class_counts.float()  # Inverse of class frequency
+    class_weights = class_weights / class_weights.sum()  # Normalize weights
+    class_weights = class_weights.to(device)
+
+    # Initialize Focal Loss with class weights
+    criterion = FocalLoss(alpha=class_weights, gamma=2.0)
+
+    # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
     # Training loop
