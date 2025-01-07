@@ -22,6 +22,8 @@ def parse_args():
     parser.add_argument('--num-epochs', type=int, default=50)
     parser.add_argument('--batch-size', type=int, default=15)
     parser.add_argument('--model-type', type=str, default='vgg', choices=['vgg', 'resnet', 'shufflenet', 'mobilenet'])
+    parser.add_argument('--lr-decay-step', type=int, default=10, help="Step size for learning rate decay (in epochs).")
+    parser.add_argument('--lr-decay-gamma', type=float, default=0.1, help="Factor by which to decay the learning rate.")
     
     # SageMaker parameters
     parser.add_argument('--project-name', type=str)
@@ -237,7 +239,15 @@ def train_model(args, type_model):
     # Initialize Focal Loss with class weights
     criterion = FocalLoss(alpha=class_weights, gamma=2.0)
 
+    # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+
+    # Learning rate scheduler
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer,
+        step_size=args.lr_decay_step,
+        gamma=args.lr_decay_gamma
+    )
 
     save_interval = 5
     best_accuracy = 0.0
@@ -256,6 +266,10 @@ def train_model(args, type_model):
             checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch + 1}.pth")
             torch.save(model.state_dict(), checkpoint_path)
             print(f"Checkpoint saved at {checkpoint_path}.")
+
+        # Step the learning rate scheduler
+        scheduler.step()
+        print(f"Learning rate updated to: {scheduler.get_last_lr()[0]:.6f}")
 
     # Save the final model
     final_model_path = os.path.join(checkpoint_dir, "model-final.pth")
