@@ -2,3 +2,6 @@ dataset/
 hasil/
 src/dataset/
 hasil2/
+src/removed_images
+src/__pycache__
+src/utils/__pycache__

@@ -8,12 +8,8 @@ from yolov5 import YOLOv5
 from pathlib import Path
 import imagehash
 
-def delete_duplicate_images(source_folder, destination_folder):
-    # Create the destination folder if it doesn't exist
-    if not os.path.exists(destination_folder):
-        os.makedirs(destination_folder)
-
-    # Dictionary to store image hashes
+def delete_duplicate_images(source_folder):
+    # Dictionary to store image hashes and their file paths
     image_hashes = {}
 
     # Walk through all subfolders and files in the source folder
@@ -28,23 +24,18 @@ def delete_duplicate_images(source_folder, destination_folder):
             try:
                 # Open the image and compute its hash
                 with Image.open(file_path) as img:
-                    img_hash = imagehash.average_hash(img)
+                    img_hash = str(imagehash.average_hash(img))
 
                 # Check if the hash already exists (i.e., duplicate image)
                 if img_hash in image_hashes:
                     print(f"Duplicate found: {file_path} (same as {image_hashes[img_hash]})")
+                    # Delete the duplicate image
+                    os.remove(file_path)
+                    print(f"Deleted duplicate: {file_path}")
                 else:
-                    # Store the hash and move the image to the destination folder
+                    # Store the hash and file path of the unique image
                     image_hashes[img_hash] = file_path
-                    # Create a relative path for the destination folder
-                    relative_path = os.path.relpath(root, source_folder)
-                    dest_subfolder = os.path.join(destination_folder, relative_path)
-                    # Create the subfolder in the destination folder if it doesn't exist
-                    if not os.path.exists(dest_subfolder):
-                        os.makedirs(dest_subfolder)
-                    # Move the image to the corresponding subfolder in the destination folder
-                    shutil.move(file_path, os.path.join(dest_subfolder, filename))
-                    print(f"Moved unique image: {file_path} to {dest_subfolder}")
+                    print(f"Unique image: {file_path}")
 
             except Exception as e:
                 print(f"Error processing {file_path}: {e}")
