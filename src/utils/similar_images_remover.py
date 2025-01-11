@@ -105,22 +105,45 @@ class SimilarImagesRemover:
         if self.verbose:
             print("Finding similar images...")
 
+        # Create a copy of image_hashes to avoid RuntimeError during iteration
+        image_hashes_copy = image_hashes.copy()
+
         # Compare image hashes to find similar images
-        for file_name, image_hash in image_hashes.items():
+        for file_name, image_hash in image_hashes_copy.items():
+            # Skip if the file has already been deleted
+            if file_name not in image_hashes:
+                continue
+
             # Keep a list of all similar images for each file_name
             self.similar_images[file_name] = []
-            for other_file, other_hash in image_hashes.items():
-                # Skip if a file has already been traversed before as a reference image
-                if file_name != other_file and other_file not in self.similar_images.keys():
-                    score, _, _ = compare_frames_change_detection(image_hash, other_hash,
-                                                                  self.min_contour_area, self.frame_change_thresh)
-                    total_area = (image_hash.shape[0] * image_hash.shape[1])
-                    # Normalize the dissimilarity score and compute the similarity score
-                    similarity_score = 1 - (score / total_area)
-                    if similarity_score > self.threshold:
-                        self.similar_images[file_name].append([other_file, similarity_score])
+            for other_file, other_hash in image_hashes_copy.items():
+                # Skip if comparing the same file or the other file has already been deleted
+                if file_name == other_file or other_file not in image_hashes:
+                    continue
+
+                # Compare the two images
+                score, _, _ = compare_frames_change_detection(image_hash, other_hash,
+                                                            self.min_contour_area, self.frame_change_thresh)
+                total_area = (image_hash.shape[0] * image_hash.shape[1])
+                # Normalize the dissimilarity score and compute the similarity score
+                similarity_score = 1 - (score / total_area)
+
+                # If similarity score is above the threshold, delete the other image
+                if similarity_score > self.threshold:
+                    self.similar_images[file_name].append([other_file, similarity_score])
+                    if self.verbose:
+                        print(f"Found similar images: {file_name} and {other_file} (Score: {similarity_score:.2f})")
+
+                    # Delete the other image
+                    other_path = os.path.join(self.folder_path, other_file)
+                    if os.path.exists(other_path):
+                        os.remove(other_path)
+                        self.num_images_removed += 1
                         if self.verbose:
-                            print(f"Found similar images: {file_name} and {other_file} (Score: {similarity_score:.2f})")
+                            print(f"Deleted duplicate image: {other_path}")
+
+                        # Remove the deleted image from image_hashes to avoid further comparisons
+                        del image_hashes[other_file]
 
         if self.verbose:
             print(f"Found {len(self.similar_images)} sets of similar images.")
@@ -143,28 +166,6 @@ class SimilarImagesRemover:
 
         # Save the output (similar images) to a logger file
         self._write_to_logger()
-
-        # Remove the similar-looking images from the folder
-        for file_name, similar_files in self.similar_images.items():
-            # Remove all similar files from the original folder
-            for similar_file in similar_files:
-                similar_path = os.path.join(self.folder_path, similar_file[0])
-                dst_file_path = os.path.join(self.removed_images_path, similar_file[0])
-
-                if os.path.exists(similar_path):
-                    if not os.path.exists(dst_file_path):
-                        # Move the similar file to the destination folder
-                        os.makedirs(os.path.dirname(dst_file_path), exist_ok=True)
-                        shutil.copy(similar_path, dst_file_path)
-                        if self.verbose:
-                            print(f"Moved similar image: {similar_path} to {dst_file_path}")
-                    # Remove the similar file from the original folder
-                    os.remove(similar_path)
-                    self.num_images_removed += 1
-                    if self.verbose:
-                        print(f"Deleted duplicate image: {similar_path}")
-                else:
-                    print(f"Warning: File '{similar_file[0]}' not found. Skipping deletion.")
 
         if self.verbose:
             print(f"Removed {self.num_images_removed} redundant images.")
@@ -256,6 +257,5 @@ if __name__ == "__main__":
     remover.visualize_preprocess_image()
 
     # Remove similar (duplicate or close to duplicate) images
-    # The removed images are stored in a separate directory called "removed_images" for easy debugging
     similar_images, num_images_removed = remover.remove_similar_images()
     print(f"Removed {num_images_removed} redundant images.")
