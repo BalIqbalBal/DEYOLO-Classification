@@ -65,8 +65,6 @@ def getSingleImageDataloader(batch_size=16, image_dir="dataset/formatted_dataset
     # Define transformations
     train_transform = transforms.Compose([
         transforms.Resize((224, 224)),
-        transforms.RandomHorizontalFlip(),  # Randomly flip the image horizontally
-        transforms.RandomRotation(15),     # Randomly rotate the image by up to 15 degrees
         transforms.ToTensor(),             # Convert the image to a tensor
     ])
 
@@ -185,8 +183,6 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
     # Define transformations
     train_transform = transforms.Compose([
         transforms.Resize((224, 224)),
-        transforms.RandomHorizontalFlip(),  # Randomly flip the image horizontally
-        transforms.RandomRotation(15),     # Randomly rotate the image by up to 15 degrees 
         transforms.ToTensor(),             # Convert the image to a tensor
     ])
 
