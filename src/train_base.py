@@ -26,6 +26,7 @@ def parse_args():
     parser.add_argument('--num-epochs', type=int, default=50)
     parser.add_argument('--batch-size', type=int, default=15)
     parser.add_argument('--model-type', type=str, default='vgg', choices=['vgg', 'resnet', 'shufflenet', 'mobilenet'])
+    parser.add_argument('--loss', type=str, default='cross_entropy', choices=['cross_entropy', 'focal'], help="Loss function to use.")
     parser.add_argument('--lr-decay-step', type=int, default=10, help="Step size for learning rate decay (in epochs).")
     parser.add_argument('--lr-decay-gamma', type=float, default=0.1, help="Factor by which to decay the learning rate.")
     parser.add_argument('--early-stopping-patience', type=int, default=5, help="Number of epochs to wait before stopping if validation accuracy doesn't improve.")
@@ -335,9 +336,13 @@ def train_model(args, type_model):
 
     class_weights = class_weights.to(device)
 
-
-    # Initialize Focal Loss with adjusted class weights
-    criterion = FocalLoss(alpha=class_weights, gamma=2.0)
+    # Initialize the selected loss function
+    if args.loss == 'cross_entropy':
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+    elif args.loss == 'focal':
+        criterion = FocalLoss(gamma=5.0)
+    else:
+        raise ValueError(f"Unsupported loss function: {args.loss}")
 
     # Optimizer with weight decay
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
