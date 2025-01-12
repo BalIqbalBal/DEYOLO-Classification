@@ -26,6 +26,7 @@ def parse_args():
     parser.add_argument('--weight-decay', type=float, default=1e-5, help="Weight decay (L2 regularization) strength.")
     parser.add_argument('--dropout-rate', type=float, default=0.5, help="Dropout rate for regularization.")
     parser.add_argument('--loss', type=str, default='cross_entropy', choices=['cross_entropy', 'focal'], help="Loss function to use.")
+    
     # SageMaker parameters
     parser.add_argument('--project-name', type=str)
     parser.add_argument('--checkpoint', type=str)
@@ -37,7 +38,7 @@ def parse_args():
 
 def log_confusion_matrix(writer, cm, class_names, epoch, stage):
     """
-    Logs the confusion matrix to TensorBoard as a figure.
+    Logs the confusion matrix (both raw and normalized) to TensorBoard as figures.
     
     Args:
         writer (SummaryWriter): TensorBoard SummaryWriter object.
@@ -46,12 +47,23 @@ def log_confusion_matrix(writer, cm, class_names, epoch, stage):
         epoch (int): Current epoch.
         stage (str): Stage of the confusion matrix (e.g., "Train", "Val", or "Test").
     """
+    # Plot raw confusion matrix
     fig, ax = plt.subplots(figsize=(8, 8))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=class_names, yticklabels=class_names, ax=ax)
     ax.set_xlabel("Predicted")
     ax.set_ylabel("True")
     ax.set_title(f"{stage} Confusion Matrix - Epoch {epoch}")
-    writer.add_figure(f"{stage}/Confusion_Matrix", fig, epoch)
+    writer.add_figure(f"{stage}/Confusion_Matrix_Raw", fig, epoch)
+    plt.close(fig)
+
+    # Plot normalized confusion matrix
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]  # Normalize by row (true labels)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    sns.heatmap(cm_normalized, annot=True, fmt=".2f", cmap="Blues", xticklabels=class_names, yticklabels=class_names, ax=ax)
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+    ax.set_title(f"{stage} Normalized Confusion Matrix - Epoch {epoch}")
+    writer.add_figure(f"{stage}/Confusion_Matrix_Normalized", fig, epoch)
     plt.close(fig)
 
 def trainDEYOLOCLASS(args):
@@ -82,7 +94,6 @@ def trainDEYOLOCLASS(args):
     )
 
     # Define model
-    #model = DEYOLOCLASS().to(device)
     model = SimpleDEYOLOCLASS(dropout_rate=args.dropout_rate).to(device)  # Add dropout to the model
 
     num_classes = 5
@@ -170,7 +181,6 @@ def trainDEYOLOCLASS(args):
     writer.close()
 
 # Training function
-
 def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names):
     model.train()
     total_loss = 0.0

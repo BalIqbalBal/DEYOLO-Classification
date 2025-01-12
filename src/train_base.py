@@ -101,10 +101,10 @@ def get_model(model_type, num_classes, pretrained=True, freeze=True, dropout_rat
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
-# Log confusion matrix to TensorBoard
+# Log confusion matrix to TensorBoard (raw and normalized)
 def log_confusion_matrix(writer, cm, class_names, epoch, stage):
     """
-    Logs the confusion matrix to TensorBoard as a figure.
+    Logs the confusion matrix (both raw and normalized) to TensorBoard as figures.
     
     Args:
         writer (SummaryWriter): TensorBoard SummaryWriter object.
@@ -113,12 +113,23 @@ def log_confusion_matrix(writer, cm, class_names, epoch, stage):
         epoch (int): Current epoch.
         stage (str): Stage of the confusion matrix (e.g., "Train", "Val", or "Test").
     """
+    # Plot raw confusion matrix
     fig, ax = plt.subplots(figsize=(8, 8))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=class_names, yticklabels=class_names, ax=ax)
     ax.set_xlabel("Predicted")
     ax.set_ylabel("True")
     ax.set_title(f"{stage} Confusion Matrix - Epoch {epoch}")
-    writer.add_figure(f"{stage}/Confusion_Matrix", fig, epoch)
+    writer.add_figure(f"{stage}/Confusion_Matrix_Raw", fig, epoch)
+    plt.close(fig)
+
+    # Plot normalized confusion matrix
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]  # Normalize by row (true labels)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    sns.heatmap(cm_normalized, annot=True, fmt=".2f", cmap="Blues", xticklabels=class_names, yticklabels=class_names, ax=ax)
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+    ax.set_title(f"{stage} Normalized Confusion Matrix - Epoch {epoch}")
+    writer.add_figure(f"{stage}/Confusion_Matrix_Normalized", fig, epoch)
     plt.close(fig)
 
 # Training loop for one epoch
@@ -186,7 +197,6 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
         else:
             raise ValueError(f"Unsupported model type: {model_type}")
 
-    
         # Get all unique labels in the dataset
         unique_labels = set()
         for _, label in train_loader.dataset:
@@ -194,47 +204,46 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
         unique_labels = list(unique_labels)
 
         # Use LayerCAM with a context manager
-        # Use LayerCAM with a context manager
         with LayerCAM(model) as cam_extractor:
-          for label in unique_labels:
-              # Collect all images with the current label
-              images_with_label = [(image, image_label) for image, image_label in train_loader.dataset if image_label == label]
+            for label in unique_labels:
+                # Collect all images with the current label
+                images_with_label = [(image, image_label) for image, image_label in train_loader.dataset if image_label == label]
 
-              if not images_with_label:
-                  print(f"No images found for class {label}. Skipping.")
-                  continue
+                if not images_with_label:
+                    print(f"No images found for class {label}. Skipping.")
+                    continue
 
-              # Randomly select one image for the current label
-              random_image, random_label = random.choice(images_with_label)
+                # Randomly select one image for the current label
+                random_image, random_label = random.choice(images_with_label)
 
-              # Prepare the input tensor
-              input_tensor = random_image.unsqueeze(0).to(device)  # Add batch dimension and move to device
-              input_tensor.requires_grad_(True)  # Enable gradients for the input tensor
+                # Prepare the input tensor
+                input_tensor = random_image.unsqueeze(0).to(device)  # Add batch dimension and move to device
+                input_tensor.requires_grad_(True)  # Enable gradients for the input tensor
 
-              # Forward pass
-              out = model(input_tensor)
+                # Forward pass
+                out = model(input_tensor)
 
-              # Retrieve the CAM for the current label
-              activation_map = cam_extractor(label, out)
+                # Retrieve the CAM for the current label
+                activation_map = cam_extractor(label, out)
 
-              if activation_map is not None:
-                  activation_map = activation_map[0]  # Use the first (and only) activation map
+                if activation_map is not None:
+                    activation_map = activation_map[0]  # Use the first (and only) activation map
 
-                  # Overlay the heatmap on the original image
-                  heatmap = overlay_mask(
-                      to_pil_image(input_tensor.squeeze(0).cpu()),  # Convert tensor to PIL image
-                      to_pil_image(activation_map, mode='F'),       # Convert activation map to PIL image
-                      alpha=0.5                                     # Transparency for the heatmap
-                  )
+                    # Overlay the heatmap on the original image
+                    heatmap = overlay_mask(
+                        to_pil_image(input_tensor.squeeze(0).cpu()),  # Convert tensor to PIL image
+                        to_pil_image(activation_map, mode='F'),       # Convert activation map to PIL image
+                        alpha=0.5                                     # Transparency for the heatmap
+                    )
 
-                  # Convert the heatmap to a numpy array
-                  heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
+                    # Convert the heatmap to a numpy array
+                    heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
 
-                  # Log the heatmap to TensorBoard
-                  writer.add_image(f"Train/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
-                  print(f"Heatmap for class {label} logged to TensorBoard for epoch {epoch + 1}")
-              else:
-                  print(f"LayerCAM returned None for class {label}. Check the model output.")
+                    # Log the heatmap to TensorBoard
+                    writer.add_image(f"Train/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
+                    print(f"Heatmap for class {label} logged to TensorBoard for epoch {epoch + 1}")
+                else:
+                    print(f"LayerCAM returned None for class {label}. Check the model output.")
 
     return acc
 
@@ -341,7 +350,7 @@ def train_model(args, type_model):
 
     # Initialize the selected loss function
     if args.loss == 'cross_entropy':
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
     elif args.loss == 'focal':
         criterion = FocalLoss(gamma=5.0)
     else:
@@ -386,7 +395,7 @@ def train_model(args, type_model):
 
         # Save checkpoint every `save_interval` epochs
         if (epoch + 1) % save_interval == 0:
-            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch.pth")
+            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch + 1}.pth")
             torch.save(model.state_dict(), checkpoint_path)
             print(f"Checkpoint saved at {checkpoint_path}.")
 
