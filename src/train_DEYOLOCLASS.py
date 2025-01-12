@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument('--early-stopping-patience', type=int, default=5, help="Number of epochs to wait before stopping if validation accuracy doesn't improve.")
     parser.add_argument('--weight-decay', type=float, default=1e-5, help="Weight decay (L2 regularization) strength.")
     parser.add_argument('--dropout-rate', type=float, default=0.5, help="Dropout rate for regularization.")
-    
+    parser.add_argument('--loss', type=str, default='cross_entropy', choices=['cross_entropy', 'focal'], help="Loss function to use.")
     # SageMaker parameters
     parser.add_argument('--project-name', type=str)
     parser.add_argument('--checkpoint', type=str)
@@ -95,8 +95,13 @@ def trainDEYOLOCLASS(args):
     class_weights = class_weights / class_weights.sum()  # Normalize weights
     class_weights = class_weights.to(device)
 
-    # Initialize Focal Loss with class weights
-    criterion = FocalLoss(alpha=class_weights, gamma=2.0)
+    # Initialize the selected loss function
+    if args.loss == 'cross_entropy':
+        criterion = nn.CrossEntropyLoss()
+    elif args.loss == 'focal':
+        criterion = FocalLoss(gamma=5.0)
+    else:
+        raise ValueError(f"Unsupported loss function: {args.loss}")
 
     # Optimizer with weight decay
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
@@ -142,7 +147,7 @@ def trainDEYOLOCLASS(args):
 
         # Save checkpoint every `save_interval` epochs
         if (epoch + 1) % save_interval == 0:
-            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch + 1}.pth")
+            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch.pth")
             torch.save(model.state_dict(), checkpoint_path)
             print(f"Checkpoint saved at {checkpoint_path}.")
 

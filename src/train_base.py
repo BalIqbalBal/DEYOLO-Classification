@@ -15,6 +15,8 @@ from torchcam.methods import LayerCAM
 from torchcam.utils import overlay_mask
 from torchvision.transforms.functional import to_pil_image
 
+import random
+
 from utils.loss import FocalLoss
 
 # Parse command-line arguments
@@ -192,37 +194,47 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
         unique_labels = list(unique_labels)
 
         # Use LayerCAM with a context manager
+        # Use LayerCAM with a context manager
         with LayerCAM(model) as cam_extractor:
-            for label in unique_labels:
-                # Find the first image in the dataset with the current label
-                for image, image_label in train_loader.dataset:
-                    if image_label == label:
-                        input_tensor = image.unsqueeze(0).to(device)  # Add batch dimension and move to device
-                        input_tensor.requires_grad_(True)  # Enable gradients for the input tensor
+          for label in unique_labels:
+              # Collect all images with the current label
+              images_with_label = [(image, image_label) for image, image_label in train_loader.dataset if image_label == label]
 
-                        # Forward pass
-                        out = model(input_tensor)
+              if not images_with_label:
+                  print(f"No images found for class {label}. Skipping.")
+                  continue
 
-                        # Retrieve the CAM for the current label
-                        activation_map = cam_extractor(label, out)
+              # Randomly select one image for the current label
+              random_image, random_label = random.choice(images_with_label)
 
-                        if activation_map is not None:
-                            activation_map = activation_map[0]  # Use the first (and only) activation map
+              # Prepare the input tensor
+              input_tensor = random_image.unsqueeze(0).to(device)  # Add batch dimension and move to device
+              input_tensor.requires_grad_(True)  # Enable gradients for the input tensor
 
-                            # Overlay the heatmap on the original image
-                            heatmap = overlay_mask(to_pil_image(input_tensor.squeeze(0).cpu()), to_pil_image(activation_map, mode='F'), alpha=0.5)
-                            
-                            # Convert the heatmap to a numpy array
-                            heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
+              # Forward pass
+              out = model(input_tensor)
 
-                            # Log the heatmap to TensorBoard
-                            writer.add_image(f"Train/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
-                            print(f"Heatmap for class {label} logged to TensorBoard for epoch {epoch + 1}")
-                        else:
-                            print(f"LayerCAM returned None for class {label}. Check the model output.")
-                        break  # Move to the next label
+              # Retrieve the CAM for the current label
+              activation_map = cam_extractor(label, out)
 
+              if activation_map is not None:
+                  activation_map = activation_map[0]  # Use the first (and only) activation map
 
+                  # Overlay the heatmap on the original image
+                  heatmap = overlay_mask(
+                      to_pil_image(input_tensor.squeeze(0).cpu()),  # Convert tensor to PIL image
+                      to_pil_image(activation_map, mode='F'),       # Convert activation map to PIL image
+                      alpha=0.5                                     # Transparency for the heatmap
+                  )
+
+                  # Convert the heatmap to a numpy array
+                  heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
+
+                  # Log the heatmap to TensorBoard
+                  writer.add_image(f"Train/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
+                  print(f"Heatmap for class {label} logged to TensorBoard for epoch {epoch + 1}")
+              else:
+                  print(f"LayerCAM returned None for class {label}. Check the model output.")
 
     return acc
 
@@ -287,37 +299,6 @@ def evaluate(model, data_loader, criterion, epoch, writer, device, class_names, 
         # Log confusion matrix
         log_confusion_matrix(writer, cm, class_names, epoch, stage)
 
-        # Use LayerCAM with a context manager
-        with LayerCAM(model) as cam_extractor:
-            for label in data_loader:
-                # Find the first image in the dataset with the current label
-                for image, image_label in data_loader.dataset:
-                    if image_label == label:
-                        input_tensor = image.unsqueeze(0).to(device)  # Add batch dimension and move to device
-                        input_tensor.requires_grad_(True)  # Enable gradients for the input tensor
-
-                        # Forward pass
-                        out = model(input_tensor)
-
-                        # Retrieve the CAM for the current label
-                        activation_map = cam_extractor(label, out)
-
-                        if activation_map is not None:
-                            activation_map = activation_map[0]  # Use the first (and only) activation map
-
-                            # Overlay the heatmap on the original image
-                            heatmap = overlay_mask(to_pil_image(input_tensor.squeeze(0).cpu()), to_pil_image(activation_map, mode='F'), alpha=0.5)
-                            
-                            # Convert the heatmap to a numpy array
-                            heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
-
-                            # Log the heatmap to TensorBoard
-                            writer.add_image(f"{stage}/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
-                        else:
-                            print(f"LayerCAM returned None for class {label}. Check the model output.")
-                        break  # Move to the next label
-
-
     return acc, cm
 
 # Main training function
@@ -360,7 +341,7 @@ def train_model(args, type_model):
 
     # Initialize the selected loss function
     if args.loss == 'cross_entropy':
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        criterion = nn.CrossEntropyLoss()
     elif args.loss == 'focal':
         criterion = FocalLoss(gamma=5.0)
     else:
@@ -405,7 +386,7 @@ def train_model(args, type_model):
 
         # Save checkpoint every `save_interval` epochs
         if (epoch + 1) % save_interval == 0:
-            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch + 1}.pth")
+            checkpoint_path = os.path.join(checkpoint_dir, f"model_epoch.pth")
             torch.save(model.state_dict(), checkpoint_path)
             print(f"Checkpoint saved at {checkpoint_path}.")
 

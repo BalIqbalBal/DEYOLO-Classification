@@ -15,7 +15,7 @@ from utils.dataset_treatment import delete_duplicate_files_randomly, delete_dupl
 #crop_face_yolov5("dataset/Dataset_Thermal", "dataset/Crop_Dataset_Thermal")
 
 #print("New dataset format")
-#organize_files_by_label("dataset/Crop_Dataset_Thermal", "dataset/datasets_zip_RGB_Face_Only", "dataset/formatted_dataset/thermal", "dataset/formatted_dataset/rgb")
+organize_files_by_label("dataset/Crop_Dataset_Thermal", "dataset/datasets_zip_RGB_Face_Only", "dataset/formatted_dataset/thermal", "dataset/formatted_dataset/rgb")
 
-delete_duplicate_images("dataset/reduce_formatted_dataset")
+#delete_duplicate_images("dataset/reduce_formatted_dataset")
 #delete_duplicate_files_randomly("dataset/formatted_dataset/rgb/label0", "dataset/formatted_dataset/thermal/label0", fraction=0.5)
