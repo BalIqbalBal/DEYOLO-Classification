@@ -29,7 +29,7 @@ def parse_args():
                         help="Weight decay (L2 regularization) strength.")
     parser.add_argument('--dropout-rate', type=float, default=0.5,
                         help="Dropout rate for regularization.")
-    parser.add_argumen('--loss', type=str, default='cross_entropy', choices=['cross_entropy', 'focal'], help="Loss function to use.")
+    parser.add_argument('--loss', type=str, default='cross_entropy', choices=['cross_entropy', 'focal'], help="Loss function to use.")
     
     # SageMaker parameters
     parser.add_argument('--project-name', type=str, default=None,

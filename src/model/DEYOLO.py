@@ -71,7 +71,7 @@ class SimpleDEYOLOCLASS(nn.Module):
 
         # Combine the last layer's features from both modalities (Thermal and RGB)
         combined_features = [
-            (rgb_last_layer, thermal_last_layer)  # Only the last layer's outputs are paired
+            rgb_last_layer, thermal_last_layer  # Only the last layer's outputs are paired
         ]
 
         # Forward pass through the simplified head with the combined features
@@ -103,14 +103,16 @@ class SimpleHead(nn.Module):
             torch.Tensor: Classifier output.
         """
         # Apply DEA module (only for layers [9, 19])
-        attention = self.dea((backbone_outputs[2][0], backbone_outputs[2][1]))  # Layer pair [9, 19]
+        attention = self.dea((backbone_outputs[0], backbone_outputs[1]))  # Layer pair [9, 19]
 
         # Pass through the classification head
         x = self.conv(attention)  # Shape: (batch, 1280, 20, 20)
         x = self.pool(x)  # Shape: (batch, 1280, 1, 1)
         x = x.flatten(1)  # Shape: (batch, 1280)
         x = self.drop(x)  # Apply dropout
-        x = self.linear
+        x = self.linear(x)
+
+        return x
 
 class Head(nn.Module):
     def __init__(self):

@@ -180,8 +180,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
     train_loader_tqdm = tqdm(train_loader, desc=f"Epoch {epoch + 1} Training", leave=False)
 
     # Initialize Grad-CAM for RGB and Thermal inputs
-    gradcam_rgb = SmoothGradCAMpp(model, target_layer="rgb_target_layer")  # Adjust to your model's architecture
-    gradcam_thermal = SmoothGradCAMpp(model, target_layer="thermal_target_layer")  # Adjust to your model's architecture
+    gradcam = SmoothGradCAMpp(model, target_layer="conv")  # Adjust to your model's architecture
 
     for step, (rgb_images, thermal_images, labels) in enumerate(train_loader_tqdm):
         rgb_images, thermal_images, labels = rgb_images.to(device), thermal_images.to(device), labels.to(device)
@@ -232,12 +231,9 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
 
     for idx, (rgb_image, thermal_image, label) in enumerate(zip(rgb_images_to_log, thermal_images_to_log, labels_to_log)):
         # Grad-CAM for RGB input
-        gradcam_rgb_map = gradcam_rgb(label.item(), rgb_image.unsqueeze(0))[0]
+        gradcam_rgb_map = gradcam(label.item(), rgb_image.unsqueeze(0))[0]
         heatmap_rgb = overlay_mask(to_pil_image(rgb_image.cpu()), to_pil_image(gradcam_rgb_map, mode='F'), alpha=0.5)
 
-        # Grad-CAM for Thermal input
-        gradcam_thermal_map = gradcam_thermal(label.item(), thermal_image.unsqueeze(0))[0]
-        heatmap_thermal = overlay_mask(to_pil_image(thermal_image.cpu()), to_pil_image(gradcam_thermal_map, mode='F'), alpha=0.5)
 
         # Convert heatmaps to Tensor for TensorBoard
         def fig_to_image(heatmap):
@@ -251,7 +247,6 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
             return img_array
 
         writer.add_image(f"Train/GradCAM_RGB_{idx}", fig_to_image(heatmap_rgb), epoch, dataformats='HWC')
-        writer.add_image(f"Train/GradCAM_Thermal_{idx}", fig_to_image(heatmap_thermal), epoch, dataformats='HWC')
 
     return acc
 

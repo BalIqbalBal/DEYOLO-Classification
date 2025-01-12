@@ -184,8 +184,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
         else:
             raise ValueError(f"Unsupported model type: {model_type}")
 
-        # Use LayerCAM with a context manager
-        # Use LayerCAM with a context manager
+    
         # Get all unique labels in the dataset
         unique_labels = set()
         for _, label in train_loader.dataset:
