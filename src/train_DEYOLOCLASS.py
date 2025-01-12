@@ -11,10 +11,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-from torchcam.methods import SmoothGradCAMpp
-from torchcam.utils import overlay_mask
-from torchvision.transforms.functional import to_pil_image
-
 from utils.loss import FocalLoss
 
 def parse_args():
@@ -179,9 +175,6 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
 
     train_loader_tqdm = tqdm(train_loader, desc=f"Epoch {epoch + 1} Training", leave=False)
 
-    # Initialize Grad-CAM for RGB and Thermal inputs
-    gradcam = SmoothGradCAMpp(model, target_layer="head.conv.conv")  # Adjust to your model's architecture
-
     for step, (rgb_images, thermal_images, labels) in enumerate(train_loader_tqdm):
         rgb_images, thermal_images, labels = rgb_images.to(device), thermal_images.to(device), labels.to(device)
 
@@ -223,30 +216,6 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
     # Log confusion matrix for training
     cm = confusion_matrix(all_labels, all_preds)
     log_confusion_matrix(writer, cm, class_names, epoch, "Train")
-
-    # Grad-CAM Visualization
-    rgb_images_to_log = rgb_images[:5]  # Log Grad-CAM for the first 5 RGB images
-    thermal_images_to_log = thermal_images[:5]  # Log Grad-CAM for the first 5 thermal images
-    labels_to_log = labels[:5]
-
-    for idx, (rgb_image, thermal_image, label) in enumerate(zip(rgb_images_to_log, thermal_images_to_log, labels_to_log)):
-        # Grad-CAM for RGB input
-        gradcam_rgb_map = gradcam(label.item(), rgb_image.unsqueeze(0))[0]
-        heatmap_rgb = overlay_mask(to_pil_image(rgb_image.cpu()), to_pil_image(gradcam_rgb_map, mode='F'), alpha=0.5)
-
-
-        # Convert heatmaps to Tensor for TensorBoard
-        def fig_to_image(heatmap):
-            fig, ax = plt.subplots()
-            ax.imshow(heatmap)
-            ax.axis('off')
-            fig.canvas.draw()
-            img_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-            img_array = img_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-            plt.close(fig)
-            return img_array
-
-        writer.add_image(f"Train/GradCAM_RGB_{idx}", fig_to_image(heatmap_rgb), epoch, dataformats='HWC')
 
     return acc
 
