@@ -180,7 +180,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
     train_loader_tqdm = tqdm(train_loader, desc=f"Epoch {epoch + 1} Training", leave=False)
 
     # Initialize Grad-CAM for RGB and Thermal inputs
-    gradcam = SmoothGradCAMpp(model, target_layer="conv")  # Adjust to your model's architecture
+    gradcam = SmoothGradCAMpp(model, target_layer="head.conv.conv")  # Adjust to your model's architecture
 
     for step, (rgb_images, thermal_images, labels) in enumerate(train_loader_tqdm):
         rgb_images, thermal_images, labels = rgb_images.to(device), thermal_images.to(device), labels.to(device)
