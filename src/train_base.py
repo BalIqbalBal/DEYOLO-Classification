@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-from torchcam.methods import SmoothGradCAMpp
+from torchcam.methods import LayerCAM
 from torchcam.utils import overlay_mask
 from torchvision.transforms.functional import to_pil_image
 
@@ -121,27 +121,13 @@ def log_confusion_matrix(writer, cm, class_names, epoch, stage):
 
 # Training loop for one epoch
 def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names, model_type):
-    model.train()
+    model.train()  # Ensure the model is in training mode
     total_loss = 0.0
     all_labels = []
     all_preds = []
     all_outputs = []
 
     train_loader_tqdm = tqdm(train_loader, desc=f"Epoch {epoch + 1} Training", leave=False)
-
-    # Initialize Grad-CAM with the correct target layer based on model_type
-    if model_type == 'vgg':
-        target_layer = model.features[-2]  # Last convolutional layer in VGG
-    elif model_type == 'resnet':
-        target_layer = model.layer4[-1]  # Last convolutional layer in ResNet
-    elif model_type == 'shufflenet':
-        target_layer = model.conv5[-1]  # Last convolutional layer in ShuffleNet
-    elif model_type == 'mobilenet':
-        target_layer = model.features[-1]  # Last convolutional layer in MobileNet
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}")
-
-    gradcam = SmoothGradCAMpp(model, target_layer=target_layer)
 
     for step, (images, labels) in enumerate(train_loader_tqdm):
         images, labels = images.to(device), labels.to(device)
@@ -161,6 +147,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
 
         train_loader_tqdm.set_postfix({"Loss": f"{loss.item():.4f}"})
 
+    # Compute metrics
     acc = accuracy_score(all_labels, all_preds)
     precision = precision_score(all_labels, all_preds, average="weighted", zero_division=0)
     recall = recall_score(all_labels, all_preds, average="weighted", zero_division=0)
@@ -183,23 +170,60 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
     cm = confusion_matrix(all_labels, all_preds)
     log_confusion_matrix(writer, cm, class_names, epoch, "Train")
 
-    # Grad-CAM Visualization
-    images_to_log = images[:5]  # Log Grad-CAM for the first 5 images
-    preds_to_log = preds[:5]  # Use model predictions for Grad-CAM
-    for idx, (image, pred) in enumerate(zip(images_to_log, preds_to_log)):
-        gradcam_map = gradcam(pred.item(), image.unsqueeze(0))[0]  # Use prediction for Grad-CAM
-        heatmap = overlay_mask(to_pil_image(image.cpu()), to_pil_image(gradcam_map, mode='F'), alpha=0.5)
-        
-        # Convert heatmap to Tensor for TensorBoard
-        fig, ax = plt.subplots()
-        ax.imshow(heatmap)
-        ax.axis('off')
-        fig.canvas.draw()
-        img_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-        img_array = img_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        plt.close(fig)
+    # After the epoch, use LayerCAM to visualize attention maps
+    if epoch % 1 == 0:  # Compute LayerCAM every epoch (adjust as needed)
+        # Initialize LayerCAM with the correct target layer based on model_type
+        if model_type == 'vgg':
+            target_layer = model.features[-2]  # Last convolutional layer in VGG
+        elif model_type == 'resnet':
+            target_layer = model.layer4[-1]  # Last convolutional layer in ResNet
+        elif model_type == 'shufflenet':
+            target_layer = model.conv5[-1]  # Last convolutional layer in ShuffleNet
+        elif model_type == 'mobilenet':
+            target_layer = model.features[-1]  # Last convolutional layer in MobileNet
+        else:
+            raise ValueError(f"Unsupported model type: {model_type}")
 
-        writer.add_image(f"Train/GradCAM_{idx}", img_array, epoch, dataformats='HWC')
+        # Use LayerCAM with a context manager
+        # Use LayerCAM with a context manager
+        # Get all unique labels in the dataset
+        unique_labels = set()
+        for _, label in train_loader.dataset:
+            unique_labels.add(label)
+        unique_labels = list(unique_labels)
+
+        # Use LayerCAM with a context manager
+        with LayerCAM(model) as cam_extractor:
+            for label in unique_labels:
+                # Find the first image in the dataset with the current label
+                for image, image_label in train_loader.dataset:
+                    if image_label == label:
+                        input_tensor = image.unsqueeze(0).to(device)  # Add batch dimension and move to device
+                        input_tensor.requires_grad_(True)  # Enable gradients for the input tensor
+
+                        # Forward pass
+                        out = model(input_tensor)
+
+                        # Retrieve the CAM for the current label
+                        activation_map = cam_extractor(label, out)
+
+                        if activation_map is not None:
+                            activation_map = activation_map[0]  # Use the first (and only) activation map
+
+                            # Overlay the heatmap on the original image
+                            heatmap = overlay_mask(to_pil_image(input_tensor.squeeze(0).cpu()), to_pil_image(activation_map, mode='F'), alpha=0.5)
+                            
+                            # Convert the heatmap to a numpy array
+                            heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
+
+                            # Log the heatmap to TensorBoard
+                            writer.add_image(f"Train/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
+                            print(f"Heatmap for class {label} logged to TensorBoard for epoch {epoch + 1}")
+                        else:
+                            print(f"LayerCAM returned None for class {label}. Check the model output.")
+                        break  # Move to the next label
+
+
 
     return acc
 
@@ -224,20 +248,6 @@ def evaluate(model, data_loader, criterion, epoch, writer, device, class_names, 
     all_labels = []
     all_preds = []
     all_outputs = []
-
-    # Initialize Grad-CAM with the correct target layer based on model_type
-    if model_type == 'vgg':
-        target_layer = model.features[-2]  # Last convolutional layer in VGG
-    elif model_type == 'resnet':
-        target_layer = model.layer4[-1]  # Last convolutional layer in ResNet
-    elif model_type == 'shufflenet':
-        target_layer = model.conv5[-1]  # Last convolutional layer in ShuffleNet
-    elif model_type == 'mobilenet':
-        target_layer = model.features[-1]  # Last convolutional layer in MobileNet
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}")
-
-    gradcam = SmoothGradCAMpp(model, target_layer=target_layer)
 
     with torch.no_grad():
         for images, labels in tqdm(data_loader, desc=f"Evaluating ({stage})", leave=False):
@@ -278,23 +288,36 @@ def evaluate(model, data_loader, criterion, epoch, writer, device, class_names, 
         # Log confusion matrix
         log_confusion_matrix(writer, cm, class_names, epoch, stage)
 
-        # Grad-CAM Visualization
-        images_to_log = images[:5]  # Log Grad-CAM for the first 5 images
-        preds_to_log = preds[:5]  # Use model predictions for Grad-CAM
-        for idx, (image, pred) in enumerate(zip(images_to_log, preds_to_log)):
-            gradcam_map = gradcam(pred.item(), image.unsqueeze(0))[0]  # Use prediction for Grad-CAM
-            heatmap = overlay_mask(to_pil_image(image.cpu()), to_pil_image(gradcam_map, mode='F'), alpha=0.5)
-            
-            # Convert heatmap to Tensor for TensorBoard
-            fig, ax = plt.subplots()
-            ax.imshow(heatmap)
-            ax.axis('off')
-            fig.canvas.draw()
-            img_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-            img_array = img_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-            plt.close(fig)
+        # Use LayerCAM with a context manager
+        with LayerCAM(model) as cam_extractor:
+            for label in data_loader:
+                # Find the first image in the dataset with the current label
+                for image, image_label in data_loader.dataset:
+                    if image_label == label:
+                        input_tensor = image.unsqueeze(0).to(device)  # Add batch dimension and move to device
+                        input_tensor.requires_grad_(True)  # Enable gradients for the input tensor
 
-            writer.add_image(f"{stage}/GradCAM_{idx}", img_array, epoch, dataformats='HWC')
+                        # Forward pass
+                        out = model(input_tensor)
+
+                        # Retrieve the CAM for the current label
+                        activation_map = cam_extractor(label, out)
+
+                        if activation_map is not None:
+                            activation_map = activation_map[0]  # Use the first (and only) activation map
+
+                            # Overlay the heatmap on the original image
+                            heatmap = overlay_mask(to_pil_image(input_tensor.squeeze(0).cpu()), to_pil_image(activation_map, mode='F'), alpha=0.5)
+                            
+                            # Convert the heatmap to a numpy array
+                            heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
+
+                            # Log the heatmap to TensorBoard
+                            writer.add_image(f"{stage}/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
+                        else:
+                            print(f"LayerCAM returned None for class {label}. Check the model output.")
+                        break  # Move to the next label
+
 
     return acc, cm
 
@@ -363,8 +386,8 @@ def train_model(args, type_model):
 
     for epoch in range(args.num_epochs):
         print(f"Epoch {epoch + 1}/{args.num_epochs}")
-        train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names, type_model)
-        val_accuracy, cm = evaluate(model, val_loader, criterion, epoch, writer, device, class_names, stage="Val", type_model)
+        train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names, args.model_type)
+        val_accuracy, cm = evaluate(model, val_loader, criterion, epoch, writer, device, class_names, stage="Val", model_type=args.model_type)
 
         # Check for improvement in validation accuracy
         if val_accuracy > best_accuracy:
