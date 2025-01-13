@@ -41,6 +41,8 @@ def parse_args():
     parser.add_argument('--checkpoint', type=str,
                         help='Checkpoint directory for saving models')
     
+    parser.add_argument('--layercam-during-training', action='store_true', help="Compute LayerCAM after each epoch during training.")
+    
     return parser.parse_args()
 
 def generate_project_name(base_name):

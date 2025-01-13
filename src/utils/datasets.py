@@ -222,6 +222,9 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
     return train_loader, val_loader, test_loader
 
 
+import os
+from PIL import Image
+
 class DualImageDataset(Dataset):
     def __init__(self, rgb_dir, thermal_dir, transform=None):
         """
@@ -249,18 +252,27 @@ class DualImageDataset(Dataset):
 
             label = int(label_name.replace('label', ''))  # Extract label from directory name
 
-            rgb_files = [f for f in os.listdir(rgb_label_dir) if os.path.isfile(os.path.join(rgb_label_dir, f))]
-            thermal_files = [f for f in os.listdir(thermal_label_dir) if os.path.isfile(os.path.join(thermal_label_dir, f))]
+            # Get base names without extensions
+            rgb_files = [os.path.splitext(f)[0] for f in os.listdir(rgb_label_dir) if os.path.isfile(os.path.join(rgb_label_dir, f))]
+            thermal_files = [os.path.splitext(f)[0] for f in os.listdir(thermal_label_dir) if os.path.isfile(os.path.join(thermal_label_dir, f))]
 
             common_files = list(set(rgb_files) & set(thermal_files))
             common_files.sort()
 
             for file_name in common_files:
-                rgb_path = os.path.join(rgb_label_dir, file_name)
-                thermal_path = os.path.join(thermal_label_dir, file_name)
+                # Reconstruct full file paths with extensions
+                rgb_path = os.path.join(rgb_label_dir, file_name + '.' + self._get_extension(os.path.join(rgb_label_dir, file_name)))
+                thermal_path = os.path.join(thermal_label_dir, file_name + '.' + self._get_extension(os.path.join(thermal_label_dir, file_name)))
                 data.append((rgb_path, thermal_path, label))
 
         return data
+
+    def _get_extension(self, base_path):
+        """Helper function to get the extension of a file given its base path"""
+        for ext in ['jpg', 'jpeg', 'png', 'bmp']:  # Add more extensions if needed
+            if os.path.exists(f"{base_path}.{ext}"):
+                return ext
+        raise FileNotFoundError(f"No file found with base path: {base_path}")
 
     def __len__(self):
         return len(self.data)

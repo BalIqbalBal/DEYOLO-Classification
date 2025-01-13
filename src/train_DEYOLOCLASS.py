@@ -11,6 +11,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+from torchcam.methods import LayerCAM
+from torchcam.utils import overlay_mask
+from torchvision.transforms.functional import to_pil_image
+
 from utils.loss import FocalLoss
 
 def parse_args():
@@ -39,13 +43,6 @@ def parse_args():
 def log_confusion_matrix(writer, cm, class_names, epoch, stage):
     """
     Logs the confusion matrix (both raw and normalized) to TensorBoard as figures.
-    
-    Args:
-        writer (SummaryWriter): TensorBoard SummaryWriter object.
-        cm (np.array): Confusion matrix.
-        class_names (list): List of class names.
-        epoch (int): Current epoch.
-        stage (str): Stage of the confusion matrix (e.g., "Train", "Val", or "Test").
     """
     # Plot raw confusion matrix
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -65,6 +62,66 @@ def log_confusion_matrix(writer, cm, class_names, epoch, stage):
     ax.set_title(f"{stage} Normalized Confusion Matrix - Epoch {epoch}")
     writer.add_figure(f"{stage}/Confusion_Matrix_Normalized", fig, epoch)
     plt.close(fig)
+
+def compute_layercam(model, data_loader, device, class_names, writer, epoch=None, stage="Test"):
+    """
+    Compute LayerCAM for a given dataset and log the results to TensorBoard.
+    """
+    model.eval()  # Ensure the model is in evaluation mode
+
+    # Get all unique labels in the dataset
+    unique_labels = set()
+    for _, _, label in data_loader.dataset:
+        unique_labels.add(label)
+    unique_labels = list(unique_labels)
+
+    # Initialize LayerCAM with the correct target layer
+    target_layer = model.features[-1]  # Adjust this based on your model architecture
+    with LayerCAM(model, target_layer) as cam_extractor:
+        for label in unique_labels:
+            # Collect all images with the current label
+            images_with_label = [(rgb_image, thermal_image, image_label) 
+                                for rgb_image, thermal_image, image_label in data_loader.dataset 
+                                if image_label == label]
+
+            if not images_with_label:
+                print(f"No images found for class {label}. Skipping.")
+                continue
+
+            # Randomly select one image for the current label
+            rgb_image, thermal_image, _ = random.choice(images_with_label)
+
+            # Prepare the input tensor
+            rgb_image = rgb_image.unsqueeze(0).to(device)  # Add batch dimension and move to device
+            thermal_image = thermal_image.unsqueeze(0).to(device)
+
+            # Forward pass
+            out = model(rgb_image, thermal_image)
+
+            # Retrieve the CAM for the current label
+            activation_map = cam_extractor(label, out)
+
+            if activation_map is not None:
+                activation_map = activation_map[0]  # Use the first (and only) activation map
+
+                # Overlay the heatmap on the original image
+                heatmap = overlay_mask(
+                    to_pil_image(rgb_image.squeeze(0).cpu()),  # Convert tensor to PIL image
+                    to_pil_image(activation_map, mode='F'),    # Convert activation map to PIL image
+                    alpha=0.5                                  # Transparency for the heatmap
+                )
+
+                # Convert the heatmap to a numpy array
+                heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
+
+                # Log the heatmap to TensorBoard
+                if epoch is not None:
+                    writer.add_image(f"{stage}/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
+                else:
+                    writer.add_image(f"{stage}/Heatmap_Class_{label}", heatmap_np, dataformats='HWC')
+                print(f"Heatmap for class {label} logged to TensorBoard for {stage}.")
+            else:
+                print(f"LayerCAM returned None for class {label}. Check the model output.")
 
 def trainDEYOLOCLASS(args):
     # Initialize TensorBoard with SageMaker output path
@@ -94,7 +151,7 @@ def trainDEYOLOCLASS(args):
     )
 
     # Define model
-    model = SimpleDEYOLOCLASS(dropout_rate=args.dropout_rate).to(device)  # Add dropout to the model
+    model = SimpleDEYOLOCLASS(dropout_rate=args.dropout_rate).to(device)
 
     num_classes = 5
     class_names = [f"Label {i}" for i in range(num_classes)]  # Replace with actual class names if available
@@ -177,6 +234,10 @@ def trainDEYOLOCLASS(args):
     print(f"Test Accuracy: {test_accuracy:.4f}")
     print("Test Confusion Matrix:")
     print(test_cm)
+
+    # Compute LayerCAM after training
+    print("\nComputing LayerCAM for the test dataset...")
+    compute_layercam(model, test_loader, device, class_names, writer, stage="Test")
 
     writer.close()
 

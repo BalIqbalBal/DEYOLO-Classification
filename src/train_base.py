@@ -42,6 +42,9 @@ def parse_args():
     parser.add_argument('--output-data-dir', type=str, default=os.environ.get('SM_OUTPUT_DATA_DIR', '/opt/ml/output'))
     parser.add_argument('--data-dir', type=str, default=os.environ.get('SM_CHANNEL_TRAINING', '/opt/ml/input/data/training'))
 
+    # LayerCAM parameters
+    parser.add_argument('--layercam-during-training', action='store_true', help="Compute LayerCAM after each epoch during training.")
+
     return parser.parse_args()
 
 # Define model loading functions with dropout
@@ -105,13 +108,6 @@ def get_model(model_type, num_classes, pretrained=True, freeze=True, dropout_rat
 def log_confusion_matrix(writer, cm, class_names, epoch, stage):
     """
     Logs the confusion matrix (both raw and normalized) to TensorBoard as figures.
-    
-    Args:
-        writer (SummaryWriter): TensorBoard SummaryWriter object.
-        cm (np.array): Confusion matrix.
-        class_names (list): List of class names.
-        epoch (int): Current epoch.
-        stage (str): Stage of the confusion matrix (e.g., "Train", "Val", or "Test").
     """
     # Plot raw confusion matrix
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -133,7 +129,7 @@ def log_confusion_matrix(writer, cm, class_names, epoch, stage):
     plt.close(fig)
 
 # Training loop for one epoch
-def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names, model_type):
+def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names, model_type, args):
     model.train()  # Ensure the model is in training mode
     total_loss = 0.0
     all_labels = []
@@ -183,85 +179,86 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
     cm = confusion_matrix(all_labels, all_preds)
     log_confusion_matrix(writer, cm, class_names, epoch, "Train")
 
-    # After the epoch, use LayerCAM to visualize attention maps
-    if epoch % 1 == 0:  # Compute LayerCAM every epoch (adjust as needed)
-        # Initialize LayerCAM with the correct target layer based on model_type
-        if model_type == 'vgg':
-            target_layer = model.features[-2]  # Last convolutional layer in VGG
-        elif model_type == 'resnet':
-            target_layer = model.layer4[-1]  # Last convolutional layer in ResNet
-        elif model_type == 'shufflenet':
-            target_layer = model.conv5[-1]  # Last convolutional layer in ShuffleNet
-        elif model_type == 'mobilenet':
-            target_layer = model.features[-1]  # Last convolutional layer in MobileNet
-        else:
-            raise ValueError(f"Unsupported model type: {model_type}")
-
-        # Get all unique labels in the dataset
-        unique_labels = set()
-        for _, label in train_loader.dataset:
-            unique_labels.add(label)
-        unique_labels = list(unique_labels)
-
-        # Use LayerCAM with a context manager
-        with LayerCAM(model) as cam_extractor:
-            for label in unique_labels:
-                # Collect all images with the current label
-                images_with_label = [(image, image_label) for image, image_label in train_loader.dataset if image_label == label]
-
-                if not images_with_label:
-                    print(f"No images found for class {label}. Skipping.")
-                    continue
-
-                # Randomly select one image for the current label
-                random_image, random_label = random.choice(images_with_label)
-
-                # Prepare the input tensor
-                input_tensor = random_image.unsqueeze(0).to(device)  # Add batch dimension and move to device
-                input_tensor.requires_grad_(True)  # Enable gradients for the input tensor
-
-                # Forward pass
-                out = model(input_tensor)
-
-                # Retrieve the CAM for the current label
-                activation_map = cam_extractor(label, out)
-
-                if activation_map is not None:
-                    activation_map = activation_map[0]  # Use the first (and only) activation map
-
-                    # Overlay the heatmap on the original image
-                    heatmap = overlay_mask(
-                        to_pil_image(input_tensor.squeeze(0).cpu()),  # Convert tensor to PIL image
-                        to_pil_image(activation_map, mode='F'),       # Convert activation map to PIL image
-                        alpha=0.5                                     # Transparency for the heatmap
-                    )
-
-                    # Convert the heatmap to a numpy array
-                    heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
-
-                    # Log the heatmap to TensorBoard
-                    writer.add_image(f"Train/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
-                    print(f"Heatmap for class {label} logged to TensorBoard for epoch {epoch + 1}")
-                else:
-                    print(f"LayerCAM returned None for class {label}. Check the model output.")
+    # Compute LayerCAM during training if enabled
+    if args.layercam_during_training and epoch % 1 == 0:  # Adjust frequency as needed
+        compute_layercam(model, train_loader, device, class_names, writer, model_type, epoch, stage="Train")
 
     return acc
+
+# Function to compute LayerCAM
+def compute_layercam(model, data_loader, device, class_names, writer, model_type, epoch=None, stage="Train"):
+    """
+    Compute LayerCAM for a given dataset and log the results to TensorBoard.
+    """
+    model.eval()  # Ensure the model is in evaluation mode
+
+    # Get all unique labels in the dataset
+    unique_labels = set()
+    for _, label in data_loader.dataset:
+        unique_labels.add(label)
+    unique_labels = list(unique_labels)
+
+    # Initialize LayerCAM with the correct target layer based on model_type
+    if model_type == 'vgg':
+        target_layer = model.features[-2]  # Last convolutional layer in VGG
+    elif model_type == 'resnet':
+        target_layer = model.layer4[-1]  # Last convolutional layer in ResNet
+    elif model_type == 'shufflenet':
+        target_layer = model.conv5[-1]  # Last convolutional layer in ShuffleNet
+    elif model_type == 'mobilenet':
+        target_layer = model.features[-1]  # Last convolutional layer in MobileNet
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
+
+    # Use LayerCAM with a context manager
+    with LayerCAM(model, target_layer) as cam_extractor:
+        for label in unique_labels:
+            # Collect all images with the current label
+            images_with_label = [(image, image_label) for image, image_label in data_loader.dataset if image_label == label]
+
+            if not images_with_label:
+                print(f"No images found for class {label}. Skipping.")
+                continue
+
+            # Randomly select one image for the current label
+            random_image, random_label = random.choice(images_with_label)
+
+            # Prepare the input tensor
+            input_tensor = random_image.unsqueeze(0).to(device)  # Add batch dimension and move to device
+            input_tensor.requires_grad_(True)  # Enable gradients for the input tensor
+
+            # Forward pass
+            out = model(input_tensor)
+
+            # Retrieve the CAM for the current label
+            activation_map = cam_extractor(label, out)
+
+            if activation_map is not None:
+                activation_map = activation_map[0]  # Use the first (and only) activation map
+
+                # Overlay the heatmap on the original image
+                heatmap = overlay_mask(
+                    to_pil_image(input_tensor.squeeze(0).cpu()),  # Convert tensor to PIL image
+                    to_pil_image(activation_map, mode='F'),       # Convert activation map to PIL image
+                    alpha=0.5                                     # Transparency for the heatmap
+                )
+
+                # Convert the heatmap to a numpy array
+                heatmap_np = np.array(heatmap)  # Convert PIL image to numpy array
+
+                # Log the heatmap to TensorBoard
+                if epoch is not None:
+                    writer.add_image(f"{stage}/Heatmap_Class_{label}", heatmap_np, epoch, dataformats='HWC')
+                else:
+                    writer.add_image(f"{stage}/Heatmap_Class_{label}", heatmap_np, dataformats='HWC')
+                print(f"Heatmap for class {label} logged to TensorBoard for {stage}.")
+            else:
+                print(f"LayerCAM returned None for class {label}. Check the model output.")
 
 # Evaluation function
 def evaluate(model, data_loader, criterion, epoch, writer, device, class_names, stage="Val", model_type=None):
     """
     Evaluate the model on a given dataset.
-    
-    Args:
-        model (nn.Module): Trained model.
-        data_loader (DataLoader): DataLoader for the dataset.
-        criterion (nn.Module): Loss function.
-        epoch (int): Current epoch.
-        writer (SummaryWriter): TensorBoard SummaryWriter object.
-        device (torch.device): Device to run the model on.
-        class_names (list): List of class names.
-        stage (str): Stage of evaluation ("Val" or "Test").
-        model_type (str): Type of model (e.g., 'vgg', 'resnet', etc.).
     """
     model.eval()
     total_loss = 0.0
@@ -375,7 +372,7 @@ def train_model(args, type_model):
 
     for epoch in range(args.num_epochs):
         print(f"Epoch {epoch + 1}/{args.num_epochs}")
-        train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names, args.model_type)
+        train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, device, class_names, args.model_type, args)
         val_accuracy, cm = evaluate(model, val_loader, criterion, epoch, writer, device, class_names, stage="Val", model_type=args.model_type)
 
         # Check for improvement in validation accuracy
@@ -414,6 +411,10 @@ def train_model(args, type_model):
     print(f"Test Accuracy: {test_accuracy:.4f}")
     print("Test Confusion Matrix:")
     print(test_cm)
+
+    # Compute LayerCAM after training
+    print("\nComputing LayerCAM for the test dataset...")
+    compute_layercam(model, test_loader, device, class_names, writer, args.model_type, stage="Test")
 
     writer.close()
 
