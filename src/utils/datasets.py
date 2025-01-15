@@ -12,6 +12,8 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms
 
+import numpy as np
+
 
 # URL for dataset download (replace this with your actual dataset URL)
 DATASET_URL = "https://pain-identification-datasets.s3.ap-southeast-1.amazonaws.com/formatted_dataset.rar"
@@ -181,9 +183,14 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
         test_loader (DataLoader): DataLoader for testing data.
     """
     # Define transformations
-    train_transform = transforms.Compose([
+    train_rgb_transform = transforms.Compose([
         transforms.Resize((224, 224)),
-        transforms.ToTensor(),             # Convert the image to a tensor
+        transforms.ToTensor(),  # Convert the image to a tensor
+    ])
+
+    train_thermal_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
     ])
 
     # Validation and test transformations (no augmentation)
@@ -193,8 +200,8 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
     ])
 
     # Create the dataset
-    train_dataset = DualImageDataset(rgb_dir=rgb_dir, thermal_dir=thermal_dir, transform=train_transform)
-    val_test_dataset = DualImageDataset(rgb_dir=rgb_dir, thermal_dir=thermal_dir, transform=val_test_transform)
+    train_dataset = DualImageDataset(rgb_dir=rgb_dir, thermal_dir=thermal_dir, rgb_transform=train_rgb_transform, thermal_transform=train_thermal_transform)
+    val_test_dataset = DualImageDataset(rgb_dir=rgb_dir, thermal_dir=thermal_dir, rgb_transform=val_test_transform, thermal_transform=val_test_transform)
 
     # Calculate sizes for train, validation, and test splits
     dataset_size = len(train_dataset)
@@ -206,36 +213,39 @@ def getDualImageDataloader(batch_size=16, rgb_dir="dataset/formatted_dataset/rgb
     train_dataset, val_dataset, test_dataset = random_split(val_test_dataset, [train_size, val_size, test_size])
 
     # Calculate class weights for the training dataset
-    labels = [train_dataset[i][1] for i in range(len(train_dataset))]  # Assuming the dataset returns (rgb_image, thermal_image, label)
-    class_counts = Counter(labels)
-    class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
-    sample_weights = [class_weights[labels[i]] for i in range(len(train_dataset))]
+    labels = [label for _, _, label in train_dataset]  # Extract labels from the training dataset
+    class_counts = np.bincount(labels)  # Count occurrences of each class
+    class_weights = 1. / class_counts  # Inverse of class counts
+    samples_weights = class_weights[labels]  # Assign weights to each sample
 
     # Create WeightedRandomSampler
-    sampler = WeightedRandomSampler(sample_weights, len(sample_weights), replacement=True)
+    weighted_sampler = WeightedRandomSampler(
+        weights=samples_weights,
+        num_samples=len(samples_weights),
+        replacement=True  # Allow sampling with replacement
+    )
 
     # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=weighted_sampler)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     return train_loader, val_loader, test_loader
 
 
-import os
-from PIL import Image
-
 class DualImageDataset(Dataset):
-    def __init__(self, rgb_dir, thermal_dir, transform=None):
+    def __init__(self, rgb_dir, thermal_dir, rgb_transform=None, thermal_transform=None):
         """
         Args:
             rgb_dir (str): Directory path for RGB images.
             thermal_dir (str): Directory path for thermal images.
-            transform (callable, optional): Optional transforms to apply to the images.
+            rgb_transform (callable, optional): Optional transforms to apply to RGB images.
+            thermal_transform (callable, optional): Optional transforms to apply to thermal images.
         """
         self.rgb_dir = rgb_dir
         self.thermal_dir = thermal_dir
-        self.transform = transform
+        self.rgb_transform = rgb_transform
+        self.thermal_transform = thermal_transform
 
         # Collect all image file paths grouped by labels
         self.data = self._load_data()
@@ -252,27 +262,18 @@ class DualImageDataset(Dataset):
 
             label = int(label_name.replace('label', ''))  # Extract label from directory name
 
-            # Get base names without extensions
-            rgb_files = [os.path.splitext(f)[0] for f in os.listdir(rgb_label_dir) if os.path.isfile(os.path.join(rgb_label_dir, f))]
-            thermal_files = [os.path.splitext(f)[0] for f in os.listdir(thermal_label_dir) if os.path.isfile(os.path.join(thermal_label_dir, f))]
+            rgb_files = [f for f in os.listdir(rgb_label_dir) if os.path.isfile(os.path.join(rgb_label_dir, f))]
+            thermal_files = [f for f in os.listdir(thermal_label_dir) if os.path.isfile(os.path.join(thermal_label_dir, f))]
 
             common_files = list(set(rgb_files) & set(thermal_files))
             common_files.sort()
 
             for file_name in common_files:
-                # Reconstruct full file paths with extensions
-                rgb_path = os.path.join(rgb_label_dir, file_name + '.' + self._get_extension(os.path.join(rgb_label_dir, file_name)))
-                thermal_path = os.path.join(thermal_label_dir, file_name + '.' + self._get_extension(os.path.join(thermal_label_dir, file_name)))
+                rgb_path = os.path.join(rgb_label_dir, file_name)
+                thermal_path = os.path.join(thermal_label_dir, file_name)
                 data.append((rgb_path, thermal_path, label))
 
         return data
-
-    def _get_extension(self, base_path):
-        """Helper function to get the extension of a file given its base path"""
-        for ext in ['jpg', 'jpeg', 'png', 'bmp']:  # Add more extensions if needed
-            if os.path.exists(f"{base_path}.{ext}"):
-                return ext
-        raise FileNotFoundError(f"No file found with base path: {base_path}")
 
     def __len__(self):
         return len(self.data)
@@ -291,9 +292,10 @@ class DualImageDataset(Dataset):
         thermal_image = Image.open(thermal_path).convert("RGB")  # Assuming thermal images are stored as RGB
 
         # Apply transformations if provided
-        if self.transform:
-            rgb_image = self.transform(rgb_image)
-            thermal_image = self.transform(thermal_image)
+        if self.rgb_transform:
+            rgb_image = self.rgb_transform(rgb_image)
+        if self.thermal_transform:
+            thermal_image = self.thermal_transform(thermal_image)
 
         return rgb_image, thermal_image, label
 
