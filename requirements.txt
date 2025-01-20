@@ -5,3 +5,4 @@ requests
 imagehash
 tensorboard
 torchcam
+git+https://github.com/ox-vgg/vgg_face2.git

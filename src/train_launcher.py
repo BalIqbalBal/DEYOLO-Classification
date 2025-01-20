@@ -8,10 +8,11 @@ def parse_args():
     
     # Training hyperparameters
     parser.add_argument('--model', type=str, required=True, 
-                        choices=['deyolo', 'vggfacergb', 'vggfacethermal', 
+                        choices=['deyolorgb', 'deyolothermal', 'vggfacergb', 'vggfacethermal', 
                                  'resnetrgb', 'resnetthermal', 
                                  'shufflenetrgb', 'shufflenetthermal', 
-                                 'mobilenetrgb', 'mobilenetthermal'],
+                                 'mobilenetrgb', 'mobilenetthermal',
+                                 'vgggfacemm', 'resnetmm', 'deyolomm'],
                         help='Model type to train')
     parser.add_argument('--learning-rate', type=float, default=1e-4,
                         help='Learning rate')
@@ -60,9 +61,20 @@ def main():
     print(f"Starting training for {args.model} model")
     print(f"Project name: {args.project_name}")
     
-    if args.model == 'deyolo':
-        from train_DEYOLOCLASS import trainDEYOLOCLASS
-        trainDEYOLOCLASS(args)
+    if args.model == 'deyolomm':
+        from train_base_modal_fusion import train_multimodal_model
+        args.model_type = 'deyolomm'
+        train_multimodal_model(args)
+
+    elif args.model == 'resnetmm':
+        from train_base_modal_fusion import train_multimodal_model
+        args.model_type = 'resnetmm'
+        train_multimodal_model(args)
+
+    elif args.model == 'vggfacemm':
+        from train_base_modal_fusion import train_multimodal_model
+        args.model_type = 'vggfacemm'
+        train_multimodal_model(args)
         
     elif args.model == 'vggfacergb':
         from train_base import train_model

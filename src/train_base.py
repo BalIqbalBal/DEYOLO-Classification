@@ -16,6 +16,7 @@ from torchcam.utils import overlay_mask
 from torchvision.transforms.functional import to_pil_image
 
 import random
+from vgg_face import VGG_16
 
 from utils.loss import FocalLoss
 
@@ -49,20 +50,45 @@ def parse_args():
 
 # Define model loading functions with dropout
 def get_vggface_model(num_classes, pretrained=True, freeze=True, dropout_rate=0.5):
-    model = models.vgg16(pretrained=pretrained)
+    """
+    Load and modify the VGGFace model for a specific number of classes.
+
+    Args:
+        num_classes (int): Number of output classes.
+        pretrained (bool): Whether to load pretrained weights.
+        freeze (bool): Whether to freeze the feature extraction layers.
+        dropout_rate (float): Dropout rate for the classifier.
+
+    Returns:
+        torch.nn.Module: Modified VGGFace model.
+    """
+    # Load the VGGFace model
+    model = VGG_16()
+
+    # Load pretrained weights if specified
+    if pretrained:
+        model.load_weights()  # Load pretrained weights
+
+    # Freeze the feature extraction layers if specified
     if freeze:
-        for param in model.features.parameters():
+        for param in model.parameters():
             param.requires_grad = False
-    model.classifier = nn.Sequential(
-        nn.Linear(25088, 4096),
+
+    # Modify the classifier (fully connected layers)
+    model.fc6 = nn.Sequential(
+        nn.Linear(25088, 4096),  # Adjust input size based on VGGFace architecture
         nn.ReLU(inplace=True),
         nn.Dropout(dropout_rate),  # Add dropout
+    )
+    model.fc7 = nn.Sequential(
         nn.Linear(4096, 4096),
         nn.ReLU(inplace=True),
         nn.Dropout(dropout_rate),  # Add dropout
-        nn.Linear(4096, num_classes),
     )
+    model.fc8 = nn.Linear(4096, num_classes)  # Final layer for classification
+
     return model
+
 
 def get_resnet_model(num_classes, pretrained=False, dropout_rate=0.5):
     model = models.resnet50(pretrained=pretrained)
