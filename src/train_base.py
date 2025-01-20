@@ -16,8 +16,7 @@ from torchcam.utils import overlay_mask
 from torchvision.transforms.functional import to_pil_image
 
 import random
-from vgg_face import VGG_16
-
+from model.vgg_face import VGGFace
 from utils.loss import FocalLoss
 
 # Parse command-line arguments
@@ -49,46 +48,28 @@ def parse_args():
     return parser.parse_args()
 
 # Define model loading functions with dropout
-def get_vggface_model(num_classes, pretrained=True, freeze=True, dropout_rate=0.5):
-    """
-    Load and modify the VGGFace model for a specific number of classes.
-
-    Args:
-        num_classes (int): Number of output classes.
-        pretrained (bool): Whether to load pretrained weights.
-        freeze (bool): Whether to freeze the feature extraction layers.
-        dropout_rate (float): Dropout rate for the classifier.
-
-    Returns:
-        torch.nn.Module: Modified VGGFace model.
-    """
-    # Load the VGGFace model
-    model = VGG_16()
+def get_vggface_model(num_classes, pretrained=True, freeze=True, weights_path="./weights/vgg_face_dag.pth"):
+    # Initialize the VGGFace model
+    model = VGGFace()
 
     # Load pretrained weights if specified
     if pretrained:
-        model.load_weights()  # Load pretrained weights
+        state_dict = torch.load(weights_path)
+        model.load_state_dict(state_dict)
 
     # Freeze the feature extraction layers if specified
     if freeze:
         for param in model.parameters():
-            param.requires_grad = False
+            param.requires_grad = False  # Freeze all layers
 
-    # Modify the classifier (fully connected layers)
-    model.fc6 = nn.Sequential(
-        nn.Linear(25088, 4096),  # Adjust input size based on VGGFace architecture
-        nn.ReLU(inplace=True),
-        nn.Dropout(dropout_rate),  # Add dropout
-    )
-    model.fc7 = nn.Sequential(
-        nn.Linear(4096, 4096),
-        nn.ReLU(inplace=True),
-        nn.Dropout(dropout_rate),  # Add dropout
-    )
-    model.fc8 = nn.Linear(4096, num_classes)  # Final layer for classification
+    # Replace the final fully connected layer (fc8) to match the number of classes
+    model.fc8 = nn.Linear(4096, num_classes)  # Output layer for the new dataset
+
+    # Unfreeze the final layer for training
+    for param in model.fc8.parameters():
+        param.requires_grad = True
 
     return model
-
 
 def get_resnet_model(num_classes, pretrained=False, dropout_rate=0.5):
     model = models.resnet50(pretrained=pretrained)

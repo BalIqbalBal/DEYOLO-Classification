@@ -12,7 +12,7 @@ def parse_args():
                                  'resnetrgb', 'resnetthermal', 
                                  'shufflenetrgb', 'shufflenetthermal', 
                                  'mobilenetrgb', 'mobilenetthermal',
-                                 'vgggfacemm', 'resnetmm', 'deyolomm'],
+                                 'vggfacemm', 'resnetmm', 'deyolomm'],
                         help='Model type to train')
     parser.add_argument('--learning-rate', type=float, default=1e-4,
                         help='Learning rate')
