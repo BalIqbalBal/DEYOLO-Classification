@@ -171,6 +171,37 @@ class Head(nn.Module):
         #y = x.softmax(1)  # Final output
         #return y DONT USE SOFTMAX BECAUSE WE USE NN.CROSSENTROPY
 
+class DEYOLOClassification(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+        
+        # Use the DEYOLOBackbone as a feature extractor
+        self.backbone = DEYOLOBackbone()
+        
+        # Global Average Pooling (GAP) layer to reduce spatial dimensions to 1x1
+        self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        
+        # Fully connected layer for classification
+        self.fc = nn.Linear(1024, num_classes)  # 1024 is the number of output channels from the backbone's last layer
+    
+    def forward(self, x):
+        # Extract features from the backbone
+        features = self.backbone(x)
+        
+        # Use the output from the last layer of the backbone
+        x = features[-1]  # features[-1] corresponds to the output of layer #8 (1024 channels)
+        
+        # Apply Global Average Pooling
+        x = self.global_avg_pool(x)
+        
+        # Flatten the output
+        x = x.view(x.size(0), -1)
+        
+        # Pass through the fully connected layer
+        x = self.fc(x)
+        
+        return x
+
 class DEYOLOBackbone(nn.Module):
     def __init__(self):
         super().__init__()

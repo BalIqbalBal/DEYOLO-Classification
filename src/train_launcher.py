@@ -115,6 +115,16 @@ def main():
         from train_base import train_model
         args.model_type = 'mobilenet'
         train_model(args, type_model='thermal')
+
+    elif args.model == 'deyolorgb':
+        from train_base import train_model
+        args.model_type = 'deyolo'
+        train_model(args, type_model='rgb')
+    
+    elif args.model == 'deyolothermal':
+        from train_base import train_model
+        args.model_type = 'deyolo'
+        train_model(args, type_model='thermal')
     
     print(f"Training completed for {args.model}")
 

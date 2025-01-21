@@ -17,6 +17,7 @@ from torchvision.transforms.functional import to_pil_image
 
 import random
 from model.vgg_face import VGGFace
+from model.DEYOLO import DEYOLOClassification
 from utils.loss import FocalLoss
 
 # Parse command-line arguments
@@ -27,7 +28,7 @@ def parse_args():
     parser.add_argument('--learning-rate', type=float, default=1e-4)
     parser.add_argument('--num-epochs', type=int, default=50)
     parser.add_argument('--batch-size', type=int, default=15)
-    parser.add_argument('--model-type', type=str, default='vgg', choices=['vgg', 'resnet', 'shufflenet', 'mobilenet'])
+    parser.add_argument('--model-type', type=str, default='vgg', choices=['vgg', 'resnet', 'shufflenet', 'mobilenet', 'deyolo'])
     parser.add_argument('--loss', type=str, default='cross_entropy', choices=['cross_entropy', 'focal'], help="Loss function to use.")
     parser.add_argument('--lr-decay-step', type=int, default=10, help="Step size for learning rate decay (in epochs).")
     parser.add_argument('--lr-decay-gamma', type=float, default=0.1, help="Factor by which to decay the learning rate.")
@@ -108,6 +109,8 @@ def get_model(model_type, num_classes, pretrained=True, freeze=True, dropout_rat
         return get_shufflenet_model(num_classes, pretrained, dropout_rate)
     elif model_type == 'mobilenet':
         return get_mobilenet_model(num_classes, pretrained, dropout_rate)
+    elif model_type == 'deyolo':
+        return DEYOLOClassification(num_classes)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
