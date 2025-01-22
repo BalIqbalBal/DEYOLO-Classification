@@ -4,7 +4,7 @@ from torchvision import models
 import torch
 from .common import Conv
 
-from .vgg_face import VGGFace
+from .vgg_face import VGG_16
 
 
 class resnetDecaDepaHead(nn.Module):
@@ -48,10 +48,10 @@ class vggfacveDecaDepaHead(nn.Module):
         super(vggfacveDecaDepaHead, self).__init__()
 
         # Define DEA module for attention (only for layers [9, 19])
-        self.dea = DEA(25088, 20)  # For layers [9, 19]
+        self.dea = DEA(4096, 20)  # For layers [9, 19]
 
         # Classification head
-        c1, c2 = 25088, 5  # Input channels for DEA output, output classes
+        c1, c2 = 4096, 5  # Input channels for DEA output, output classes
         self.conv = Conv(c1, 1280, 1, 1)  # EfficientNet-b0 size
         self.pool = nn.AdaptiveAvgPool2d(1)  # Pool to shape (b, c_, 1, 1)
         self.drop = nn.Dropout(p=dropout_rate, inplace=True)  # Dropout with the specified rate
@@ -129,29 +129,24 @@ class resnetDecaDepa(nn.Module):
         return output
 
 class vggfaceDecaDepa(nn.Module):
-    def __init__(self, dropout_rate=0.2, rgb_weights_path="./weights/vgg_face_dag.pth", thermal_weights_path=None):
+    def __init__(self, dropout_rate=0.2, rgb_weights_path="vgg_face_torch/VGG_FACE.t7", thermal_weights_path="vgg_face_torch/VGG_FACE.t7"):
         super(vggfaceDecaDepa, self).__init__()
 
         # Define the VGG-Face backbone for RGB input
-        self.rgb_backbone = VGGFace()
+        self.rgb_backbone = VGG_16()
         if rgb_weights_path:
-            # Load the pretrained VGG-Face weights
-            state_dict = torch.load(rgb_weights_path)
-            self.rgb_backbone.load_state_dict(state_dict)
+            self.rgb_backbone.load_weights(rgb_weights_path)
 
         # Define the VGG-Face backbone for Thermal input (optional)
-        self.thermal_backbone = VGGFace()
+        self.thermal_backbone = VGG_16()
         if thermal_weights_path:
             # Load custom pretrained weights for thermal input (if provided)
-            state_dict = torch.load(thermal_weights_path)
-            self.thermal_backbone.load_state_dict(state_dict)
+            self.thermal_backbone.load_weights(thermal_weights_path)
 
         # Remove the classifier to use the backbone as a feature extractor
-        self.rgb_backbone.fc6 = nn.Identity()
         self.rgb_backbone.fc7 = nn.Identity()
         self.rgb_backbone.fc8 = nn.Identity()
 
-        self.thermal_backbone.fc6 = nn.Identity()
         self.thermal_backbone.fc7 = nn.Identity()
         self.thermal_backbone.fc8 = nn.Identity()
 
