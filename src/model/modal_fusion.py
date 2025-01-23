@@ -144,10 +144,8 @@ class vggfaceDecaDepa(nn.Module):
             self.thermal_backbone.load_weights(thermal_weights_path)
 
         # Remove the classifier to use the backbone as a feature extractor
-        self.rgb_backbone.fc7 = nn.Identity()
         self.rgb_backbone.fc8 = nn.Identity()
 
-        self.thermal_backbone.fc7 = nn.Identity()
         self.thermal_backbone.fc8 = nn.Identity()
 
         # Define dropout layers

@@ -178,7 +178,7 @@ def train_multimodal_model(args):
 
     # Setup data directories
     rgb_dir = os.path.join(args.data_dir, 'rgb')
-    thermal_dir = os.path.join(args.data_dir, 'thermal')
+    thermal_dir = os.path.join(args.data_dir, 'thermal_flip')
     print(f"Loading data from:\nRGB: {rgb_dir}\nThermal: {thermal_dir}")
 
     # Dataset
