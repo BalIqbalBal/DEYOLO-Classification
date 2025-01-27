@@ -16,7 +16,7 @@ from torchcam.utils import overlay_mask
 from torchvision.transforms.functional import to_pil_image
 
 import random
-from model.vgg_face import VGGFace
+from model.vgg_face import VGG_16
 from model.DEYOLO import DEYOLOClassification
 from utils.loss import FocalLoss
 
@@ -51,24 +51,12 @@ def parse_args():
 # Define model loading functions with dropout
 def get_vggface_model(num_classes, pretrained=True, freeze=True, weights_path="./weights/vgg_face_dag.pth"):
     # Initialize the VGGFace model
-    model = VGGFace()
+    model = VGG_16()
 
     # Load pretrained weights if specified
     if pretrained:
         state_dict = torch.load(weights_path)
-        model.load_state_dict(state_dict)
-
-    # Freeze the feature extraction layers if specified
-    if freeze:
-        for param in model.parameters():
-            param.requires_grad = False  # Freeze all layers
-
-    # Replace the final fully connected layer (fc8) to match the number of classes
-    model.fc8 = nn.Linear(4096, num_classes)  # Output layer for the new dataset
-
-    # Unfreeze the final layer for training
-    for param in model.fc8.parameters():
-        param.requires_grad = True
+        model.load_weights(state_dict)
 
     return model
 
