@@ -15,7 +15,7 @@ class resnetDecaDepaHead(nn.Module):
         self.dea = DEA(2048, 20)  # For layers [9, 19]
 
         # Classification head
-        c1, c2 = 2048, 49  # Input channels for DEA output, output classes
+        c1, c2 = 2048, 50  # Input channels for DEA output, output classes
         self.conv = Conv(c1, 1280, 1, 1)  # EfficientNet-b0 size
         self.pool = nn.AdaptiveAvgPool2d(1)  # Pool to shape (b, c_, 1, 1)
         self.drop = nn.Dropout(p=dropout_rate, inplace=True)  # Dropout with the specified rate
@@ -51,7 +51,7 @@ class vggfacveDecaDepaHead(nn.Module):
         self.dea = DEA(4096, 20)  # For layers [9, 19]
 
         # Classification head
-        c1, c2 = 4096, 49  # Input channels for DEA output, output classes
+        c1, c2 = 4096, 50  # Input channels for DEA output, output classes
         self.conv = Conv(c1, 1280, 1, 1)  # EfficientNet-b0 size
         self.pool = nn.AdaptiveAvgPool2d(1)  # Pool to shape (b, c_, 1, 1)
         self.drop = nn.Dropout(p=dropout_rate, inplace=True)  # Dropout with the specified rate

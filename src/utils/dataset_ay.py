@@ -61,7 +61,7 @@ def getDualImageDataloader(dataset_dir, rgb_transform=None, thermal_transform=No
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=True,
         num_workers=num_workers
     )
 

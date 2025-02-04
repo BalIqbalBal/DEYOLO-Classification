@@ -79,9 +79,9 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
         optimizer.zero_grad()
         logits = model(rgb_images, thermal_images)  # Forward pass
         
-        print(f"Min label: {labels.min().item()}, Max label: {labels.max().item()}")
-        print(f"Logits shape: {logits.shape}")  # Seharusnya [batch_size, n_classes]
-        print(f"Unique labels: {labels.unique()}")  # Pastikan semua dalam rentang 0 hingga n_classes - 1
+        #print(f"Min label: {labels.min().item()}, Max label: {labels.max().item()}")
+        #print(f"Logits shape: {logits.shape}")  # Seharusnya [batch_size, n_classes]
+        #print(f"Unique labels: {labels.unique()}")  # Pastikan semua dalam rentang 0 hingga n_classes - 1
 
         loss = criterion(logits, labels)
         loss.backward()
@@ -104,9 +104,8 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
     f1 = f1_score(all_labels, all_preds, average="weighted", zero_division=0)
     mse = mean_squared_error(all_labels, all_preds)
     mae = mean_absolute_error(all_labels, all_preds)
-    auc = roc_auc_score(all_labels, all_outputs, multi_class='ovr', average='weighted')
 
-    print(f"Train Loss: {total_loss / len(train_loader):.4f}, Accuracy: {acc:.4f}, MSE: {mse:.4f}, MAE: {mae:.4f}, AUC: {auc:.4f}")
+    print(f"Train Loss: {total_loss / len(train_loader):.4f}, Accuracy: {acc:.4f}, MSE: {mse:.4f}, MAE: {mae:.4f}")
     writer.add_scalar("Train/Loss", total_loss / len(train_loader), epoch)
     writer.add_scalar("Train/Accuracy", acc, epoch)
     writer.add_scalar("Train/Precision", precision, epoch)
@@ -114,7 +113,6 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
     writer.add_scalar("Train/F1", f1, epoch)
     writer.add_scalar("Train/MSE", mse, epoch)
     writer.add_scalar("Train/MAE", mae, epoch)
-    writer.add_scalar("Train/AUC", auc, epoch)
 
     # Log confusion matrix for training
     cm = confusion_matrix(all_labels, all_preds)
@@ -150,9 +148,8 @@ def evaluate(model, data_loader, criterion, epoch, writer, device, class_names, 
     f1 = f1_score(all_labels, all_preds, average="weighted", zero_division=0)
     mse = mean_squared_error(all_labels, all_preds)
     mae = mean_absolute_error(all_labels, all_preds)
-    auc = roc_auc_score(all_labels, all_outputs, multi_class='ovr', average='weighted')
 
-    print(f"{stage} Loss: {total_loss / len(data_loader):.4f}, Accuracy: {acc:.4f}, MSE: {mse:.4f}, MAE: {mae:.4f}, AUC: {auc:.4f}")
+    print(f"{stage} Loss: {total_loss / len(data_loader):.4f}, Accuracy: {acc:.4f}, MSE: {mse:.4f}, MAE: {mae:.4f}")
     writer.add_scalar(f"{stage}/Loss", total_loss / len(data_loader), epoch)
     writer.add_scalar(f"{stage}/Accuracy", acc, epoch)
     writer.add_scalar(f"{stage}/Precision", precision, epoch)
@@ -160,7 +157,6 @@ def evaluate(model, data_loader, criterion, epoch, writer, device, class_names, 
     writer.add_scalar(f"{stage}/F1", f1, epoch)
     writer.add_scalar(f"{stage}/MSE", mse, epoch)
     writer.add_scalar(f"{stage}/MAE", mae, epoch)
-    writer.add_scalar(f"{stage}/AUC", auc, epoch)
 
     # Log confusion matrix
     cm = confusion_matrix(all_labels, all_preds)
