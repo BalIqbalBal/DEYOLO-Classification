@@ -10,7 +10,7 @@ from torchvision import transforms
 
 import numpy as np
 
-def getDualImageDataloader(rgb_dir, thermal_dir, rgb_transform=None, thermal_transform=None, batch_size=32, test_size=0.2, shuffle=True, num_workers=4):
+def getDualImageDataloader(dataset_dir, rgb_transform=None, thermal_transform=None, batch_size=32, shuffle=True, num_workers=4):
     """
     Creates and returns train and test DataLoader instances for the DualImageDataset.
 
@@ -42,37 +42,37 @@ def getDualImageDataloader(rgb_dir, thermal_dir, rgb_transform=None, thermal_tra
     ])
 
     # Create the full dataset
-    dataset = DualImageDataset(
-        rgb_dir=rgb_dir,
-        thermal_dir=thermal_dir,
+    train_dataset = DualImageDataset(
+        rgb_dir=os.path.join(dataset_dir, "VIS"),
+        thermal_dir=os.path.join(dataset_dir, "NIR"),
         rgb_transform=rgb_transform,
         thermal_transform=thermal_transform
     )
 
-    # Calculate sizes for train and test splits
-    dataset_size = len(dataset)
-    test_size = int(test_size * dataset_size)
-    train_size = dataset_size - test_size
+    val_dataset = DualImageDataset(
+        rgb_dir=os.path.join(dataset_dir + "_test", "VIS"),
+        thermal_dir=os.path.join(dataset_dir + "_test", "NIR"),
+        rgb_transform=rgb_transform,
+        thermal_transform=thermal_transform
+    )
 
-    # Split the dataset into train and test subsets
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-
+   
     # Create DataLoader instances for train and test subsets
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=shuffle,
+        shuffle=False,
         num_workers=num_workers
     )
 
-    test_loader = DataLoader(
-        test_dataset,
+    val_dataset = DataLoader(
+        val_dataset,
         batch_size=batch_size,
         shuffle=False,  # No need to shuffle the test data
         num_workers=num_workers
     )
 
-    return train_loader, test_loader
+    return train_loader, val_dataset
 
 
 class DualImageDataset(Dataset):

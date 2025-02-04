@@ -78,6 +78,11 @@ def train_one_epoch(model, train_loader, criterion, optimizer, epoch, writer, de
 
         optimizer.zero_grad()
         logits = model(rgb_images, thermal_images)  # Forward pass
+        
+        print(f"Min label: {labels.min().item()}, Max label: {labels.max().item()}")
+        print(f"Logits shape: {logits.shape}")  # Seharusnya [batch_size, n_classes]
+        print(f"Unique labels: {labels.unique()}")  # Pastikan semua dalam rentang 0 hingga n_classes - 1
+
         loss = criterion(logits, labels)
         loss.backward()
         optimizer.step()
@@ -176,17 +181,11 @@ def train_multimodal_model(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Using device:", device)
 
-    # Setup data directories
-    rgb_dir = os.path.join(args.data_dir, 'rgb')
-    thermal_dir = os.path.join(args.data_dir, 'thermal_flip')
-    print(f"Loading data from:\nRGB: {rgb_dir}\nThermal: {thermal_dir}")
 
     # Dataset
     train_loader, val_loader = getDualImageDataloader(
-        args.batch_size,
-        rgb_dir=rgb_dir,
-        thermal_dir=thermal_dir,
-        test_size=0.2,
+        batch_size=args.batch_size,
+        dataset_dir=args.data_dir,
     )
 
     # Define model based on the selected type
